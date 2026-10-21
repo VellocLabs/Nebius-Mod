@@ -1,0 +1,13 @@
+{
+  "name": "nebius-mod",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The Nebius plugin for Velloc: Token Factory models as a provider, Sandboxes as MCP tools.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test tests/nebius-mod.test.mjs tests/nebius-sandbox.test.mjs"
+  }
+}

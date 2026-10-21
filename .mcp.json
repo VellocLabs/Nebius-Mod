@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "contree": {
+      "command": "uvx",
+      "args": [
+        "--with",
+        "mcp==1.*",
+        "contree-mcp"
+      ],
+      "env": {
+        "NEBIUS_API_KEY": "${provider_key.token-factory}",
+        "NEBIUS_AI_PROJECT": "${user_config.project_id}",
+        "CONTREE_NO_UPDATE_CHECK": "1"
+      }
+    }
+  }
+}
