@@ -1546,7 +1546,7 @@ test('setup: auth.ini stands in for the key and project; access problems and a r
   assert.equal(firstBlocker(noAccess).id, 'access')
   assert.match(setupReport(noAccess, tEn), /missing: spawn_disposable/)
   const offPath = setupChecks({ uv: { state: 'offPath' }, key: true, project: true }, { mcp: { isConnected: true }, defaultImage: 'x', parts: ['sandbox'] })
-  assert.match(setupReport(offPath, tEn), /Restart Velloc[\s\S]*the user does this/)
+  assert.match(setupReport(offPath, tEn), /Reconnect in \/sandbox[\s\S]*fully quit Velloc[\s\S]*the user does this/)
   const noImage = setupChecks({ uv: { state: 'ok' }, key: true, project: true }, { mcp: { isConnected: true }, defaultImage: '', parts: ['sandbox'] })
   assert.equal(firstBlocker(noImage), null, 'a missing default image only means naming one per call')
 })

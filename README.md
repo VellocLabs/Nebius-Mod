@@ -92,8 +92,10 @@ line per requirement with who fixes it (the user, or the agent once the user
 agrees) and the next step. Keys are checked for presence only. Nothing is
 checked or shown until it matters: when the server does not connect, the
 Sandbox pane lists the unmet lines, and a refusal of one of the plugin's own
-tools caused by setup carries the same report. A stdio server that failed
-starts again only with the next session (after installing uv: restart Velloc).
+tools caused by setup carries the same report. Reconnect in the pane, or the
+check itself, starts a server that failed again in the same conversation, so
+after installing uv nothing needs restarting (on a Velloc build that finds
+tools installed while it runs and relaunches a failed plugin server).
 The `nebius:setup` skill routes a request for a sandbox or web search through
 this check before anything runs, so nothing is installed on this computer in
 the sandbox's place.

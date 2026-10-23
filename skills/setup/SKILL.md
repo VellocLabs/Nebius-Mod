@@ -14,14 +14,16 @@ Python or anything else locally to stand in for it.
    per requirement, who fixes it, and the next step.
 2. **Fix what you may.** A line marked "you can do this once the user agrees"
    (installing uv, naming an image): say what you would run and why, and do
-   it only after the user says yes. After installing uv, the user must
-   restart Velloc.
+   it only after the user says yes. After installing uv, check again: the
+   check reconnects the sandbox server in this conversation.
 3. **Hand over the rest.** For each line marked "the user does this" — the
    Nebius API key, the Project ID, Sandboxes access, the Tavily key — tell the
    user where to enter it, in the words the check gave, and stop. Never ask
    for a key or ID in chat and never write one to a file.
-4. **Check again** after the user says it is done. A server that did not start
-   starts with the next session; say so when the check reports it.
+4. **Check again** after the user says it is done; the check reconnects a
+   sandbox server that did not start. Only if a just-installed tool is still
+   not found, ask the user to fully quit Velloc (tray icon included) and
+   reopen it.
 5. **Ready.** Once the check says everything is set up, carry on with the
    user's request through the sandbox tools (`mcp__contree__*`, whose server
    explains itself with `get_guide`) or Tavily search.
