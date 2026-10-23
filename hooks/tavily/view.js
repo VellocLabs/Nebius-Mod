@@ -35,6 +35,7 @@ export function tavilyTree(ui, view, t, actions, bodyColumns = 48) {
       ]),
     ] }),
   ]
+  if (view.missingKey) children.push(text(`${t('setup.tavily.label')}: ${t('setup.tavily.missing')}`, { key: 'tavily-setup', color: 'yellow' }))
   if (view.error) children.push(text(view.error, { color: 'red' }))
   if (!selected) children.push(card('tavily-results-section', [heading('tavily.results'), text(t('tavily.empty'), { dimColor: true })]))
   else {

@@ -17,7 +17,7 @@ const nodes = tree => !tree || typeof tree !== 'object' ? [] : [tree, ...(tree.c
 const find = (tree, key) => nodes(tree).find(node => node.key === key)
 const base = (id, startedAt = Date.now()) => boundedRecord({ id, startedAt, epoch: '', status: 'pending', query: 'test' })
 
-function harness(store = sharedStore(), { reenter = false } = {}) {
+function harness(store = sharedStore(), { reenter = false, setup } = {}) {
   const hooks = []
   const opened = [], commands = [], states = [], calls = []
   let confirm = 'tavily.clear'
@@ -37,7 +37,7 @@ function harness(store = sharedStore(), { reenter = false } = {}) {
       return dispatch('tool.call', { ...structuredClone(input), tool_use_id: `modtool_${calls.length}` }, next)
     } },
   }
-  registerTavily((event, filter, handler) => { hooks.push({ event, filter: typeof filter === 'function' ? {} : filter, handler: handler ?? filter }) })
+  registerTavily((event, filter, handler) => { hooks.push({ event, filter: typeof filter === 'function' ? {} : filter, handler: handler ?? filter }) }, { setup })
   async function dispatch(event, input = {}, next = async () => ({})) {
     const hook = hooks.find(hook => hook.event === event && Object.entries(hook.filter).every(([key, value]) => input[key] === value))
     return hook ? hook.handler($, input, next) : next(input)
@@ -409,4 +409,25 @@ test('query precedes results and history labels shrink with pane width', () => {
   assert.ok(label(narrow).length < label(wide).length)
   assert.equal(find(narrow, 'tavily-history').options[1].value, 'long')
   assert.equal(view.rows[0].query, query)
+})
+
+test('a missing Tavily key is named in the panel on /tavily and after a failed search; a saved one is not', async () => {
+  let saved = false
+  const h = harness(sharedStore(), { setup: async () => saved })
+  await h.start()
+  await h.dispatch('command.run', { command: 'tavily' })
+  const notice = tree => nodes(tree).some(node => node.key === 'tavily-setup')
+  assert.ok(notice(await h.render()))
+  assert.ok(nodes(await h.render()).some(node => node.children?.some(child => typeof child === 'string' && child.startsWith('setup.tavily.label: setup.tavily.missing'))))
+  saved = true
+  await h.dispatch('command.run', { command: 'tavily' })
+  assert.ok(!notice(await h.render()))
+  saved = false
+  h.core(async () => { throw new Error('tool mcp__tavily__tavily_search is not available') })
+  const search = nodes(await h.render()).find(node => node.key === 'tavily-search')
+  await h.dispatch('ui.render', { component: 'Pane', requestId: 'tavily' })
+  const input = nodes(await h.render()).find(node => node.key === 'tavily-query')
+  await input.onInput('news')
+  await search.onPress()
+  assert.ok(notice(await h.render()))
 })

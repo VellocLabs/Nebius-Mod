@@ -31,6 +31,7 @@ import { imageRows, createImageCatalog } from '../hooks/sandbox/images.js'
 import { localTime, safeDetail } from '../hooks/sandbox/details.js'
 import { taskOutcome, persistenceOf } from '../hooks/sandbox/tasks.js'
 import { register } from '../hooks/sandbox.js'
+import { PROVIDER_ID, firstBlocker, probeSetup, setupChecks, setupReport } from '../hooks/setup.js'
 import { createTaskHistory, historyDetail, HISTORY_PREFIX, HISTORY_RECORD_BYTES } from '../hooks/sandbox/history.js'
 import { isActive, missingPermissions, operationIdOf as opIdOf, replyOf, resultImageOf as imageOf, statusOf } from '../hooks/sandbox/replies.js'
 
@@ -370,7 +371,7 @@ function matches(matcher, e) {
  * `server(tool, args)` answers each `$.mcp.call` with the reply object (sent as
  * JSON text) or throws.
  */
-function loadMod({ options = {}, server = () => ({}), store = new Map(), locale = 'en' } = {}) {
+function loadMod({ options = {}, server = () => ({}), store = new Map(), locale = 'en', connect, settings, process, files = [], env = {} } = {}) {
   const hooks = []
   register((event, matcherOrFn, maybeFn) => {
     const fn = typeof matcherOrFn === 'function' ? matcherOrFn : maybeFn
@@ -384,7 +385,11 @@ function loadMod({ options = {}, server = () => ({}), store = new Map(), locale 
     fs: {
       read: async path => readFileSync(path, 'utf8'),
       write: async (path, text) => record.written = { path, text },
+      exists: async path => files.includes(path),
     },
+    env: { get: async name => env[name] },
+    ...(settings ? { settings: { read: async () => structuredClone(settings) } } : {}),
+    ...(process ? { process: { run: async argv => process(argv) } } : {}),
     session: { id: async () => 'session-1' },
     store: {
       get: async key => store.get(key),
@@ -407,7 +412,7 @@ function loadMod({ options = {}, server = () => ({}), store = new Map(), locale 
     command: { register: async spec => void record.commands.push(spec) },
     clock: { every: (ms, fn) => (record.timers.push({ ms, fn }), { cancel() {} }) },
     mcp: {
-      connect: async server => ({ isConnected: true, server }),
+      connect: connect ?? (async server => ({ isConnected: true, server })),
       call: async (serverName, tool, args) => {
         assert.equal(serverName, 'contree')
         calls.push({ tool, args })
@@ -427,11 +432,11 @@ function loadMod({ options = {}, server = () => ({}), store = new Map(), locale 
   return { hooks, fire, $, calls, record, store, settle }
 }
 
-test('mod: session.start registers the six tools and /sandbox, starts one poller, reads its texts', async () => {
+test('mod: session.start registers the seven tools and /sandbox, starts one poller, reads its texts', async () => {
   const mod = loadMod({ locale: 'zh-CN' })
   await mod.fire('session.start', { locale: 'zh-CN' })
   assert.deepEqual(mod.record.tools.map(spec => spec.name), [
-    'sandbox_lanes', 'sandbox_lane_new', 'sandbox_lane_release', 'sandbox_lane_drop', 'sandbox_lane_patch', 'sandbox_test_matrix',
+    'nebius_setup', 'sandbox_lanes', 'sandbox_lane_new', 'sandbox_lane_release', 'sandbox_lane_drop', 'sandbox_lane_patch', 'sandbox_test_matrix',
   ])
   for (const spec of mod.record.tools) {
     assert.equal(spec.inputSchema.type, 'object')
@@ -1133,7 +1138,7 @@ test('manifest: userConfig fields as the plugin format holds them; the mod reads
   assert.ok(manifest.providers['token-factory'], 'the provider whose key the sandboxes use')
   const source = readFileSync(join(pluginDir, 'hooks', 'sandbox.js'), 'utf8')
   for (const key of source.matchAll(/options\.(\w+)/g)) assert.ok(fields[key[1]], `options.${key[1]} is declared`)
-  assert.match(manifest.version, /^1\.1\.\d+$/)
+  assert.match(manifest.version, /^1\.2\.\d+$/)
 })
 
 test(".mcp.json: contree over uvx; the provider's key reaches only an env value; every option and provider it names is declared", () => {
@@ -1165,10 +1170,17 @@ test(".mcp.json: contree over uvx; the provider's key reaches only an env value;
   }
 })
 
-test('hooks and agents: present and well-formed; no skills', () => {
+test('hooks, agents and the one setup skill: present and well-formed', () => {
   assert.deepEqual(readJson('hooks/hooks.json'), { modules: ['./sandbox.js'] })
-  // Usage lives in the MCP servers' own instructions and the tool descriptions.
-  assert.ok(!existsSync(join(pluginDir, 'skills')), 'the plugin ships no skills')
+  // Usage lives in the MCP servers' own instructions and the tool descriptions;
+  // the one skill covers the case those cannot: a server that never started.
+  assert.deepEqual(readdirSync(join(pluginDir, 'skills')), ['setup'])
+  const skill = readFileSync(join(pluginDir, 'skills', 'setup', 'SKILL.md'), 'utf8').replace(/\r\n/g, '\n')
+  const front = skill.split('\n---\n')[0]
+  assert.match(front, /^---\nname: setup\n/)
+  const description = front.match(/^description: (.+)$/m)?.[1] ?? ''
+  assert.ok(description.length > 40 && description.length <= 250, `the catalog shows ${description.length} of at most 250 characters`)
+  assert.match(skill, /mcp__nebius__nebius_setup/)
   for (const agent of ['sandbox-dev', 'sandbox-tester']) {
     const path = join(pluginDir, 'agents', `${agent}.md`)
     assert.ok(existsSync(path))
@@ -1499,4 +1511,98 @@ test('review: sequential clears always advance generation and watermark', async 
   assert.ok(second.before > first.before)
   assert.equal(await history.save(task), false)
   assert.equal((await history.load()).records.length, 0)
+})
+
+// ── setup ──
+
+const SEALED = 'sealed-key-value-never-shown'
+const HOME = 'C:/Users/me'
+const savedSettings = ({ key = true, project = true, tavily = true } = {}) => ({
+  providers: { configs: { [PROVIDER_ID]: { ...(key ? { apiKey: SEALED } : {}), ...(tavily ? { secrets: { tavily_api_key: SEALED } } : {}) } } },
+  pluginConfigs: { 'nebius@velloc': { options: project ? { project_id: 'project-1' } : {} } },
+})
+const uvMissing = () => ({ exitCode: 1, stdout: 'uvx: command not found', stderr: '' })
+const uvOk = () => ({ exitCode: 0, stdout: 'uv 0.9.1\n', stderr: '' })
+const tEn = translator([EN])
+
+test('setup: a clean machine lists every missing piece in order, uv first, who fixes each', () => {
+  const checks = setupChecks({ uv: { state: 'missing' }, key: false, project: false, tavilyKey: false, authFile: false }, { mcp: { isConnected: false, reason: 'failed' }, defaultImage: '' })
+  assert.deepEqual(checks.map(check => [check.id, check.state, check.by]), [
+    ['uv', 'missing', 'agent'], ['key', 'missing', 'user'], ['project', 'missing', 'user'],
+    ['server', 'failed', 'user'], ['image', 'missing', 'agent'], ['tavily', 'missing', 'user'],
+  ])
+  assert.equal(firstBlocker(checks).id, 'uv')
+  const report = setupReport(checks, tEn)
+  assert.match(report, /✗ uv \(starts the sandbox server\): not installed/)
+  assert.match(report, /Models → Nebius → Project ID/)
+  assert.match(report, /Next: uv/)
+})
+
+test('setup: auth.ini stands in for the key and project; access problems and a ready state are told apart', () => {
+  const viaFile = setupChecks({ uv: { state: 'ok', version: 'uv 0.9.1' }, key: false, project: false, authFile: true }, { mcp: { isConnected: true }, defaultImage: 'tag:python:3.12', parts: ['sandbox'] })
+  assert.equal(firstBlocker(viaFile), null)
+  assert.match(setupReport(viaFile, tEn), /auth\.ini[\s\S]*Everything is set up/)
+  const noAccess = setupChecks({ uv: { state: 'ok' }, key: true, project: true }, { mcp: { isConnected: true, missing: ['spawn_disposable'] }, defaultImage: 'x', parts: ['sandbox'] })
+  assert.equal(firstBlocker(noAccess).id, 'access')
+  assert.match(setupReport(noAccess, tEn), /missing: spawn_disposable/)
+  const offPath = setupChecks({ uv: { state: 'offPath' }, key: true, project: true }, { mcp: { isConnected: true }, defaultImage: 'x', parts: ['sandbox'] })
+  assert.match(setupReport(offPath, tEn), /Restart Velloc[\s\S]*the user does this/)
+  const noImage = setupChecks({ uv: { state: 'ok' }, key: true, project: true }, { mcp: { isConnected: true }, defaultImage: '', parts: ['sandbox'] })
+  assert.equal(firstBlocker(noImage), null, 'a missing default image only means naming one per call')
+})
+
+test('setup: probing reads key presence only, finds the project in pluginConfigs and uv off PATH', async () => {
+  const $ = {
+    plugin: { name: 'nebius' },
+    settings: { read: async () => savedSettings({ tavily: false }) },
+    env: { get: async name => (name === 'USERPROFILE' ? 'C:\\Users\\me\\' : undefined) },
+    fs: { exists: async path => path === `${HOME}/.local/bin/uvx.exe` },
+    process: { run: async () => uvMissing() },
+  }
+  const facts = await probeSetup($)
+  assert.deepEqual(facts, { key: true, tavilyKey: false, uv: { state: 'offPath' }, project: true, authFile: false })
+  assert.doesNotMatch(JSON.stringify(facts), new RegExp(SEALED))
+  assert.deepEqual(await probeSetup({ plugin: { name: 'nebius' } }, { parts: ['search'] }), { key: null, tavilyKey: null }, 'no settings: unknown, not missing')
+})
+
+test('mod: nebius_setup answers the report without opening the pane or reading a key, and is allowed without asking', async () => {
+  const mod = loadMod({ settings: savedSettings({ project: false }), process: uvOk, env: { USERPROFILE: HOME } })
+  await mod.fire('session.start', {})
+  await mod.settle()
+  const answer = await mod.fire('tool.call', { tool: 'mcp__nebius__nebius_setup', tool_use_id: 't' })
+  assert.match(answer.result, /✓ uv \(starts the sandbox server\): uv 0\.9\.1/)
+  assert.match(answer.result, /✗ Project ID: not set/)
+  assert.match(answer.result, /Next: Project ID/)
+  assert.doesNotMatch(answer.result, new RegExp(SEALED))
+  assert.deepEqual(mod.record.opened, [], 'a setup check is not a sandbox task')
+  const search = await mod.fire('tool.call', { tool: 'mcp__nebius__nebius_setup', tool_use_id: 't2', part: 'search' })
+  assert.match(search.result, /^✓ Tavily API key \(web search\): saved\n\nEverything is set up\.$/)
+  assert.equal((await mod.fire('tool.check', { tool: 'mcp__nebius__nebius_setup' }, async () => ({ decision: 'ask' }))).decision, 'allow')
+})
+
+test('mod: a server that never started puts the setup rows in the pane and after the own tools\' refusals', async () => {
+  const mod = loadMod({
+    options: { default_image: 'tag:python:3.12' },
+    connect: async () => ({ isConnected: false, reason: 'failed', message: '"contree" did not connect: spawn uvx ENOENT' }),
+    server: () => new Error('MCP server "contree" is not connected (status: failed).'),
+    settings: savedSettings({ key: false, project: false }),
+    process: uvMissing,
+  })
+  await mod.fire('session.start', {})
+  for (let i = 0; i < 5; i++) await mod.settle()
+  const view = mod.record.state.get('view')
+  assert.deepEqual(view.setup.filter(check => check.state !== 'ok').map(check => check.id), ['uv', 'key', 'project', 'server'])
+  const tree = paneTree(elements, view, t, { refresh() {}, reconnect() {}, cancel() {}, drop() {} }, NOW)
+  assert.ok(textsOf(tree).some(text => /✗ uv \(starts the sandbox server\): not installed/.test(text)))
+  assert.ok(buttonsOf(tree).some(b => b.props.key === 'reconnect'))
+  const made = await mod.fire('tool.call', { tool: 'mcp__nebius__sandbox_lane_new', tool_use_id: 't', name: 'python-dev' })
+  assert.match(made.deny, /^could not look up image tag:python:3\.12: MCP server "contree" is not connected[\s\S]*\n\n✗ uv[\s\S]*Next: uv/)
+})
+
+test('mod: an empty default image is explained, and the manifest now defaults to tag:python:3.12', async () => {
+  assert.equal(manifest.userConfig.default_image.default, 'tag:python:3.12')
+  const mod = loadMod({ settings: savedSettings(), process: uvOk })
+  await mod.fire('session.start', {})
+  const made = await mod.fire('tool.call', { tool: 'mcp__nebius__sandbox_lane_new', tool_use_id: 't', name: 'python-dev' })
+  assert.match(made.deny, /no default image[\s\S]*Default image: not set/)
 })

@@ -3,7 +3,8 @@ import { SEARCH_TOOL, boundedRecord, completeRecord, safeText } from './tavily/r
 import { clearHistory, currentRecord, readHistory, saveRecord, uniqueId, watermark } from './tavily/storage.js'
 import { tavilyTree } from './tavily/view.js'
 
-export function registerTavily(on) {
+/** `setup($)`: whether the Tavily key is saved (`true`/`false`), `null` when it cannot tell. */
+export function registerTavily(on, { setup } = {}) {
   let root
   let t = key => key
   let view = { rows: [], pending: [], selected: null, draft: '', error: null, submitting: false, historySelection: 0, expanded: [] }
@@ -41,6 +42,14 @@ export function registerTavily(on) {
     acceptMark(history.mark)
     view = { ...view, rows: history.rows, error: null }
     await publish($)
+  }
+
+  /** Marks the panel when the Tavily key is known to be missing. */
+  async function checkKey($) {
+    if (!setup) return
+    const saved = await quietly(() => setup($))
+    view = { ...view, missingKey: saved === false }
+    await quietly(() => publish($))
   }
 
   async function open($, focus = false) {
@@ -117,6 +126,7 @@ export function registerTavily(on) {
       } catch (error) {
         view = { ...view, error: safeText(error instanceof Error ? error.message : String(error)) || t('tavily.failed') }
       } finally {
+        if (view.error) await checkKey(root)
         view = { ...view, submitting: false }
         await quietly(() => publish(root))
       }
@@ -166,6 +176,7 @@ export function registerTavily(on) {
 
   on('command.run', { command: 'tavily' }, async ($) => {
     await quietly(() => refresh($))
+    await checkKey($)
     await open($, true)
     return {}
   })

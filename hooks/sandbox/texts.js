@@ -26,8 +26,8 @@ export function translator(tables) {
   }
 }
 
-/** Reads the tables for `$.plugin.locale` and answers a synchronous translator. */
-export async function loadTexts($) {
+/** Reads the tables for `locale` (default `$.plugin.locale`) and answers a synchronous translator. */
+export async function loadTexts($, locale = $.plugin.locale) {
   const read = async tag => {
     try {
       return JSON.parse(await $.fs.read(`${$.plugin.root}/locales/${tag}.json`))
@@ -35,6 +35,6 @@ export async function loadTexts($) {
       return undefined
     }
   }
-  const tables = await Promise.all(candidateTags($.plugin.locale).map(read))
+  const tables = await Promise.all(candidateTags(locale).map(read))
   return translator(tables)
 }

@@ -4,6 +4,7 @@ import { imagesTree } from './images.js'
 import { tasksTree } from './tasks.js'
 import { localTime } from './details.js'
 import { fileTree } from './files.js'
+import { checkTextKey } from '../setup.js'
 export { isActive }
 export function normalizeOperations(reply, tracked, limit = 12) {
   const rows = Array.isArray(reply?.operations) ? reply.operations : Array.isArray(reply) ? reply : []
@@ -44,7 +45,13 @@ export function paneTree(ui,view,t,actions,now) {
   ]))
   if (!connected && view.mcp) {
     const reason=view.mcp.authError ?? view.mcp.reason ?? view.mcp.missing?.join(', ') ?? ''
-    children.push(text(reason,{color:'red',wrap:'wrap'}),Button({key:'reconnect',label:t('pane.reconnect'),onPress:actions.reconnect}))
+    children.push(text(reason,{color:'red',wrap:'wrap'}))
+    const unmet=(view.setup ?? []).filter(check=>check.state!=='ok')
+    if(unmet.length) children.push(Box({key:'setup',flexDirection:'column',children:[
+      text(t('setup.title'),{weight:'semibold'}),
+      ...unmet.map(check=>text(`✗ ${t(`setup.${check.id}.label`)}: ${t(checkTextKey(check),check.vars)}`,{key:`setup:${check.id}`,wrap:'wrap'})),
+    ]}))
+    children.push(Button({key:'reconnect',label:t('pane.reconnect'),onPress:actions.reconnect}))
   }
   if(tab === 'tasks') {
     children.push(tasksTree(ui,view,t,actions,now))

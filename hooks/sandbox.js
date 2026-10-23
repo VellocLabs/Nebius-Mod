@@ -12,6 +12,9 @@
  *   while something runs.
  * - With `auto_approve_remote` on, `tool.check` allows the contree tools that
  *   touch only the sandbox; the ones that read or write local files still ask.
+ * - `nebius_setup` checks what Sandboxes and Tavily search still need; a server
+ *   that does not connect is checked the same way for the pane, and the own
+ *   tools' failures carry the check's report.
  */
 
 import { registerTavily } from './tavily.js'
@@ -39,6 +42,7 @@ import { createImageCatalog } from './sandbox/images.js'
 import { createFileBrowser } from './sandbox/files.js'
 import { migrateLanes, readGlobalLanes, writeLaneChanges } from './sandbox/storage.js'
 import { patchCommand, PATCH_OUTPUT_LIMIT, PATCH_INLINE_LIMIT } from './sandbox/patch.js'
+import { PARTS, probeSetup, setupChecks, setupReport } from './setup.js'
 
 const PLUGIN = 'nebius'
 const PANE_ID = 'sandbox'
@@ -51,6 +55,13 @@ const ALL_CONTREE_TOOLS = [...REMOTE_ONLY_TOOLS, 'rsync', 'upload', 'download']
 
 /** The plugin's own tools; `sandbox_lane_patch` can write a local file, so it is never auto-approved. */
 const OWN_TOOLS = {
+  nebius_setup: {
+    description: 'Check what Nebius Sandboxes (cloud microVMs for running code) and Tavily web search still need: uv, the Nebius API key and Project ID, the sandbox server and its access, a default image, the Tavily key. Call it first when the user wants something run in a sandbox or the cloud, or wants web search, and whenever a sandbox or Tavily tool is missing or fails. Answers one line per requirement, who fixes it, and the next step. Reads no key.',
+    inputSchema: {
+      type: 'object',
+      properties: { part: { type: 'string', enum: ['sandbox', 'search', 'all'], description: 'What to check. Default all.' } },
+    },
+  },
   sandbox_lanes: {
     description: 'List the global sandbox lanes shared across sessions: each lane is a chain of images; its head is the newest. Use lane:<name> as the image of any contree tool to work on that lane.',
     inputSchema: { type: 'object', properties: {} },
@@ -92,6 +103,11 @@ const OWN_TOOLS = {
     inputSchema: MATRIX_SCHEMA,
   },
 }
+/** Not connected, cannot start, never started: a failure the setup check explains. */
+const SERVER_DOWN = /not connected|did not connect|cannot start|did not start|not built/i
+
+/** The own tools the pane records as sandbox tasks; the setup check is not one. */
+const TRACKED_OWN = Object.keys(OWN_TOOLS).filter(name => name !== 'nebius_setup')
 const AUTO_APPROVED_OWN = ['sandbox_lanes', 'sandbox_lane_new', 'sandbox_lane_release', 'sandbox_lane_drop', 'sandbox_test_matrix']
 
 /** A registered tool's full name, as the engine lists it. */
@@ -120,15 +136,16 @@ function optionNumber(value, fallback) {
 }
 
 export function register(on, options = {}) {
-  registerTavily(on)
   const config = {
     defaultImage: optionString(options.default_image),
     maxRunSeconds: optionNumber(options.max_run_seconds, 1800),
     autoApprove: options.auto_approve_remote === true,
   }
+  registerTavily(on, { setup: async $ => (await probeSetup($, { parts: ['search'] })).tavilyKey })
 
   let root = null
   let t = key => key
+  let tEn = key => key
   let lanes = {}
   let view = { section: 'tasks', latestTask: null, mcp: null, lanes: [], ops: [], updatedAt: null, error: null, selectedLane: null, calls: [], totalCalls: 0, lastCall: null, quota: null, browser: null }
   let paneOpen = false
@@ -301,6 +318,29 @@ export function register(on, options = {}) {
     await $.state.set(viewRef($), view).catch(() => undefined)
   }
 
+  // One probe at a time per set of parts: the poller re-checks a down server.
+  const probing = new Map()
+  function probeOnce($, parts) {
+    const key = parts.join(',')
+    if (!probing.has(key)) probing.set(key, probeSetup($, { parts }).finally(() => probing.delete(key)))
+    return probing.get(key)
+  }
+
+  /** The setup rows of `parts`, kept in the view for the pane. */
+  async function runSetup($, parts = PARTS) {
+    const facts = await probeOnce($, parts)
+    const checks = setupChecks(facts, { mcp: view.mcp, defaultImage: config.defaultImage, parts })
+    if (parts.includes('sandbox')) view = { ...view, setup: checks.filter(check => check.id !== 'tavily') }
+    await publish($)
+    return checks
+  }
+
+  async function setupTool($, e) {
+    const parts = e.part === 'sandbox' || e.part === 'search' ? [e.part] : PARTS
+    if (parts.includes('sandbox') && !(view.mcp?.isConnected && !view.mcp.authError && !view.mcp.missing)) await checkServer($)
+    return { result: setupReport(await runSetup($, parts), tEn) }
+  }
+
   async function checkServer($) {
     try {
       const connected = await $.mcp.connect(CONTREE_SERVER)
@@ -319,7 +359,10 @@ export function register(on, options = {}) {
     } catch (error) {
       view = { ...view, mcp: { isConnected: false, reason: messageOf(error) } }
     }
+    const healthy = view.mcp.isConnected && !view.mcp.authError && !view.mcp.missing
+    if (healthy) view = { ...view, setup: null }
     await publish($)
+    if (!healthy) void runSetup($, ['sandbox']).catch(() => undefined)
   }
 
   async function refresh($) {
@@ -595,6 +638,8 @@ export function register(on, options = {}) {
   async function ownTool($, e) {
     const name = e.tool.slice(e.tool.lastIndexOf('__') + 2)
     switch (name) {
+      case 'nebius_setup':
+        return setupTool($, e)
       case 'sandbox_lanes':
         return { result: describeLanes(lanes) }
       case 'sandbox_lane_new':
@@ -628,6 +673,7 @@ export function register(on, options = {}) {
     // Clear any composer status left by an older plugin version; all status lives in the pane.
     await $.ui.status(undefined).catch(() => undefined)
     t = await loadTexts($)
+    tEn = await loadTexts($, 'en')
     lanes = await migrateLanes($.store)
     statsKey = `monitor/${await $.session.id()}`
     const stats = await $.store.get(statsKey).catch(() => null)
@@ -643,7 +689,7 @@ export function register(on, options = {}) {
   })
 
   // Outer observer: preserve the existing guards and results; never count our own polling.
-  on('tool.call', { tool: [...contreeToolNames(ALL_CONTREE_TOOLS), ...Object.keys(OWN_TOOLS).map(ownToolName)] }, async ($, e, next) => {
+  on('tool.call', { tool: [...contreeToolNames(ALL_CONTREE_TOOLS), ...TRACKED_OWN.map(ownToolName)] }, async ($, e, next) => {
     await reloadLanes($)
     await reloadHistory()
     let id = `call:${++callSeq}`
@@ -726,15 +772,25 @@ export function register(on, options = {}) {
     return ran
   })
 
+  /** A refusal caused by setup, with the setup report after it. */
+  async function explained($, answer) {
+    const reason = answer?.deny
+    if (typeof reason !== 'string') return answer
+    const image = /no default image/.test(reason)
+    if (!image && !SERVER_DOWN.test(reason)) return answer
+    const checks = await runSetup($, ['sandbox']).catch(() => null)
+    return checks ? { deny: `${reason}\n\n${setupReport(checks, tEn)}` } : answer
+  }
+
   on('tool.call', { tool: Object.keys(OWN_TOOLS).map(ownToolName) }, async ($, e) => {
     try {
-      return await ownTool($, e)
+      return await explained($, await ownTool($, e))
     } catch (error) {
-      return { deny: `${e.tool} failed: ${messageOf(error)}` }
+      return explained($, { deny: `${e.tool} failed: ${messageOf(error)}` })
     }
   })
 
-  on('tool.check', { tool: [...contreeToolNames(ALL_CONTREE_TOOLS), ...Object.keys(OWN_TOOLS).map(ownToolName)] }, async ($, e, next) => {
+  on('tool.check', { tool: [...contreeToolNames(ALL_CONTREE_TOOLS), ...TRACKED_OWN.map(ownToolName)] }, async ($, e, next) => {
     const seed = await history?.begin({ method: e.tool, args: e.input ?? {}, startedAt: now(), pending: false, failed: true })
     const verdict = await next(e)
     if (verdict?.decision === 'deny' && seed) {
@@ -744,6 +800,9 @@ export function register(on, options = {}) {
     }
     return verdict
   })
+
+  // A local, read-only check: `uvx --version` and settings presence, never a key.
+  on('tool.check', { tool: ownToolName('nebius_setup') }, async () => ({ decision: 'allow', reason: 'nebius: setup check reads no key and changes nothing' }))
 
   if (config.autoApprove) {
     const approved = [...contreeToolNames(REMOTE_ONLY_TOOLS), ...AUTO_APPROVED_OWN.map(ownToolName)]

@@ -82,9 +82,21 @@ ends in a new one. Nothing a run does touches this machine.
 3. Models → **Nebius Token Factory**: enter the **Project ID** for sandboxes.
    Existing saved project IDs are retained. With the key or project missing,
    the server reads `~/.config/contree/auth.ini` instead (written by `contree auth`).
-4. Settings → Plugins & Mods → **nebius** keeps the optional **Default image**
-   (`tag:python:3.12`, or a UUID), **Longest run**, and
-   **Approve remote-only sandbox tools**. Their defaults are unchanged.
+4. Settings → Plugins & Mods → **nebius** keeps the **Default image**
+   (`tag:python:3.12` unless changed; a tag or a UUID), **Longest run**, and
+   **Approve remote-only sandbox tools**.
+
+**What is still missing.** `nebius_setup` checks each of the above, plus the
+server's connection and Sandboxes access and the Tavily key, and answers one
+line per requirement with who fixes it (the user, or the agent once the user
+agrees) and the next step. Keys are checked for presence only. Nothing is
+checked or shown until it matters: when the server does not connect, the
+Sandbox pane lists the unmet lines, and a refusal of one of the plugin's own
+tools caused by setup carries the same report. A stdio server that failed
+starts again only with the next session (after installing uv: restart Velloc).
+The `nebius:setup` skill routes a request for a sandbox or web search through
+this check before anything runs, so nothing is installed on this computer in
+the sandbox's place.
 
 Needs a Velloc build that fills `${user_config.*}` and `${provider_key.*}`
 in a plugin's MCP server configuration; an older one passes the placeholder
@@ -96,6 +108,7 @@ through as text and the server cannot authenticate.
 |---|---|
 | `.mcp.json` — server `contree` | The contree tools: `run`, `rsync`, `upload`, `download`, `import_image`, `list_images`, `get_image`, `set_tag`, `list_files`, `read_file`, `grep`, `get_operation`, `list_operations`, `wait_operations`, `cancel_operation`, `get_guide` (as `mcp__contree__*`) |
 | Session mod `hooks/sandbox.js` | Lanes, guards, the plugin's own tools, the Sandbox pane and status line (below) |
+| Skill | `nebius:setup`: check and finish setup before the first sandbox run or web search |
 | Agents | `nebius:sandbox-dev` (builds one part in its own lane, never writes local files), `nebius:sandbox-tester` (runs tests only) |
 
 **Lanes.** A lane is a named chain of images. `image: "lane:<name>"` in any
@@ -117,6 +130,7 @@ sub-agent's:
 
 | Tool | Does |
 |---|---|
+| `nebius_setup` | what Sandboxes and Tavily search still need, and who fixes each (never asks; reads no key) |
 | `sandbox_lanes` | lists the lanes |
 | `sandbox_lane_new` | starts a lane at an image, a tag or another lane's head |
 | `sandbox_lane_release` | frees a lane from its owner |
@@ -164,7 +178,8 @@ need this setting (or allow rules for `mcp__contree` and `mcp__nebius`).
 In Models → **Nebius Token Factory**, save an optional **Tavily API key**.
 It is separate from the Nebius key and is sent only to the Tavily MCP server
 in an HTTPS Authorization header, never to contree or the model API.
-Leaving it unset keeps models and sandboxes usable; Tavily requires setup.
+Leaving it unset keeps models and sandboxes usable; Tavily requires setup:
+`nebius_setup` names the missing key, and `/tavily` shows where to save it.
 
 The hosted MCP server provides Search, Extract, Map, Crawl and Research.
 It sends no usage instructions and its tool definitions are small, so Velloc
@@ -201,6 +216,7 @@ providers/nebius.js          the provider hooks
 .mcp.json                    the contree MCP server
 hooks/hooks.json             the session mod's entry
 hooks/sandbox.js             the session mod: hooks and the plugin's tools
+hooks/setup.js               what Sandboxes and Tavily still need: probe, checks, report
 hooks/sandbox/lanes.js       lanes and guards (pure)
 hooks/sandbox/matrix.js      the test matrix plan and summary (pure)
 hooks/sandbox/patch.js       the patch command (pure)
@@ -209,6 +225,7 @@ hooks/sandbox/replies.js     the server's reply shapes: unwrapping, status, ids 
 hooks/sandbox/texts.js       the per-language text loader
 locales/*.json               the mod's text, English first
 agents/*.md                  the two agent types
+skills/setup/SKILL.md        the setup skill
 ```
 
 The unit tests are `tests/nebius-mod.test.mjs` (the provider) and

@@ -1,0 +1,138 @@
+/**
+ * What Sandboxes and Tavily search need before they work: uv, the Nebius key
+ * and Project ID, the contree connection and access, a default image, the
+ * Tavily key. `probeSetup` reads through `$`; the rest is pure.
+ * Security: keys are checked for presence only; a sealed value never reaches
+ * a reply, a check or the pane.
+ */
+
+export const PROVIDER_ID = 'mod.nebius.token-factory'
+export const PARTS = Object.freeze(['sandbox', 'search'])
+
+/** Where uv's installers put `uvx` when it is not on PATH. */
+const UV_DIRS = Object.freeze(['.local/bin', '.cargo/bin'])
+const UV_NAMES = Object.freeze(['uvx.exe', 'uvx'])
+const UV_TIMEOUT_MS = 15_000
+
+async function quietly(action, fallback = null) {
+  try { return await action() } catch { return fallback }
+}
+
+function filled(value) {
+  return typeof value === 'string' && value.trim() !== ''
+}
+
+async function homeOf($) {
+  for (const name of ['USERPROFILE', 'HOME']) {
+    const value = await quietly(() => $.env.get(name))
+    if (filled(value)) return value.replace(/\\/g, '/').replace(/\/+$/, '')
+  }
+  return null
+}
+
+async function exists($, path) {
+  return (await quietly(() => $.fs.exists(path), false)) === true
+}
+
+/** `uvx` on PATH: `ok` with its version, `offPath` when installed where PATH does not reach, else `missing`. */
+async function probeUv($, home) {
+  if (typeof $.process?.run !== 'function') return { state: 'unknown' }
+  const ran = await quietly(() => $.process.run(['uvx', '--version'], { timeoutMs: UV_TIMEOUT_MS }))
+  if (ran && ran.exitCode === 0) return { state: 'ok', version: String(ran.stdout ?? '').trim().split(/\r?\n/)[0] }
+  if (home) {
+    for (const dir of UV_DIRS) {
+      for (const name of UV_NAMES) {
+        if (await exists($, `${home}/${dir}/${name}`)) return { state: 'offPath' }
+      }
+    }
+  }
+  return { state: 'missing' }
+}
+
+/** This plugin's stored options in settings.json, by its config id (`<name>` or `<name>@<source>`). */
+function storedOptions(settings, plugin) {
+  const configs = settings?.pluginConfigs
+  if (!configs || typeof configs !== 'object') return null
+  for (const [id, entry] of Object.entries(configs)) {
+    if (id === plugin || id.startsWith(`${plugin}@`)) return entry?.options ?? {}
+  }
+  return null
+}
+
+/**
+ * The facts the checks read. `true`/`false` where they are known, `null`
+ * where the runtime could not tell.
+ */
+export async function probeSetup($, { parts = PARTS } = {}) {
+  const settings = await quietly(() => $.settings.read())
+  const provider = settings?.providers?.configs?.[PROVIDER_ID]
+  const known = value => (settings ? value : null)
+  const facts = {
+    key: known(filled(provider?.apiKey)),
+    tavilyKey: known(filled(provider?.secrets?.tavily_api_key)),
+  }
+  if (!parts.includes('sandbox')) return facts
+  const home = await homeOf($)
+  const stored = storedOptions(settings, $.plugin?.name ?? 'nebius')
+  return {
+    ...facts,
+    uv: await probeUv($, home),
+    project: known(filled(stored?.project_id)),
+    authFile: home ? await exists($, `${home}/.config/contree/auth.ini`) : false,
+  }
+}
+
+/**
+ * One row per requirement of `parts`, in the order they must be met:
+ * `{ id, state: 'ok' | 'missing' | 'failed' | 'unknown', by: 'user' | 'agent', vars? }`.
+ * `mcp` is the contree connection as the pane holds it; `defaultImage` the option.
+ */
+export function setupChecks(facts, { mcp = null, defaultImage = '', parts = PARTS } = {}) {
+  const checks = []
+  const add = (id, state, by, vars) => checks.push({ id, state, by, ...(vars ? { vars } : {}) })
+  if (parts.includes('sandbox')) {
+    const uv = facts.uv?.state ?? 'unknown'
+    add('uv', uv === 'ok' ? 'ok' : uv === 'offPath' ? 'failed' : uv, uv === 'offPath' ? 'user' : 'agent', uv === 'ok' ? { version: facts.uv.version } : undefined)
+    const credential = (value, id) => add(id, value === true ? 'ok' : facts.authFile ? 'ok' : value === false ? 'missing' : 'unknown', 'user', value !== true && facts.authFile ? { via: 'auth.ini' } : undefined)
+    credential(facts.key, 'key')
+    credential(facts.project, 'project')
+    if (!mcp) add('server', 'unknown', 'user')
+    else if (!mcp.isConnected) add('server', 'failed', 'user', { reason: String(mcp.reason ?? mcp.message ?? '') })
+    else add('server', 'ok', 'user')
+    if (mcp?.isConnected) {
+      if (mcp.authError) add('access', 'failed', 'user', { message: mcp.authError })
+      else if (mcp.missing?.length) add('access', 'missing', 'user', { missing: mcp.missing.join(', ') })
+      else add('access', 'ok', 'user')
+    }
+    add('image', filled(defaultImage) ? 'ok' : 'missing', 'agent', filled(defaultImage) ? { image: defaultImage } : undefined)
+  }
+  if (parts.includes('search')) {
+    add('tavily', facts.tavilyKey === true ? 'ok' : facts.tavilyKey === false ? 'missing' : 'unknown', 'user')
+  }
+  return checks
+}
+
+/** The first row that is not met and stops the part working, else null; a missing default image only means naming one per call. */
+export function firstBlocker(checks) {
+  return checks.find(check => check.state !== 'ok' && check.id !== 'image') ?? null
+}
+
+/** The text key a row reads as: `setup.<id>.<state>`, or `.offPath` for uv installed off PATH. */
+export function checkTextKey(check) {
+  if (check.id === 'uv' && check.state === 'failed') return 'setup.uv.offPath'
+  if (check.state === 'ok' && check.vars?.via) return `setup.${check.id}.viaFile`
+  return `setup.${check.id}.${check.state}`
+}
+
+/**
+ * The model's reading of `checks` (`t` reads English): one line per row, who
+ * fixes what, and the next step. The model relays the user's part; it never
+ * asks for a key in chat.
+ */
+export function setupReport(checks, t) {
+  const mark = { ok: '✓', missing: '✗', failed: '✗', unknown: '?' }
+  const lines = checks.map(check => `${mark[check.state]} ${t(`setup.${check.id}.label`)}: ${t(checkTextKey(check), check.vars)}${check.state === 'ok' ? '' : ` [${t(`setup.by.${check.by}`)}]`}`)
+  const blocker = firstBlocker(checks)
+  lines.push('', blocker ? t('setup.report.next', { item: t(`setup.${blocker.id}.label`) }) : t('setup.report.ready'))
+  return lines.join('\n')
+}
