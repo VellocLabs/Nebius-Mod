@@ -56,10 +56,11 @@ const ALL_CONTREE_TOOLS = [...REMOTE_ONLY_TOOLS, 'rsync', 'upload', 'download']
 /** The plugin's own tools; `sandbox_lane_patch` can write a local file, so it is never auto-approved. */
 const OWN_TOOLS = {
   nebius_setup: {
-    description: 'Check what Nebius Sandboxes (cloud microVMs for running code) and Tavily web search still need: uv, the Nebius API key and Project ID, the sandbox server and its access, a default image, the Tavily key. Call it first when the user wants something run in a sandbox or the cloud, or wants web search, and whenever a sandbox or Tavily tool is missing or fails. Answers one line per requirement, who fixes it, and the next step. Reads no key.',
+    description: 'Check what Nebius Sandboxes (cloud microVMs for running code) or Tavily web search still need before the user\'s request can run. Call it first when the user wants something run in a sandbox or the cloud, or asks to search the web, and whenever a sandbox or Tavily tool is missing or fails. Answers one line per requirement, who does it (you, after the user agrees, or the user), and what to do next. Reads no key.',
     inputSchema: {
       type: 'object',
-      properties: { part: { type: 'string', enum: ['sandbox', 'search', 'all'], description: 'What to check. Default all.' } },
+      properties: { part: { type: 'string', enum: ['sandbox', 'search'], description: 'Only what the request needs: sandbox to run code in the cloud; search only when the user asked for web search.' } },
+      required: ['part'],
     },
   },
   sandbox_lanes: {
@@ -336,7 +337,7 @@ export function register(on, options = {}) {
   }
 
   async function setupTool($, e) {
-    const parts = e.part === 'sandbox' || e.part === 'search' ? [e.part] : PARTS
+    const parts = e.part === 'search' ? ['search'] : e.part === 'all' ? PARTS : ['sandbox']
     if (parts.includes('sandbox') && !(view.mcp?.isConnected && !view.mcp.authError && !view.mcp.missing)) await checkServer($)
     return { result: setupReport(await runSetup($, parts), tEn) }
   }

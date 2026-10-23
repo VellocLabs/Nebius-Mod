@@ -86,10 +86,13 @@ ends in a new one. Nothing a run does touches this machine.
    (`tag:python:3.12` unless changed; a tag or a UUID), **Longest run**, and
    **Approve remote-only sandbox tools**.
 
-**What is still missing.** `nebius_setup` checks each of the above, plus the
-server's connection and Sandboxes access and the Tavily key, and answers one
-line per requirement with who fixes it (the user, or the agent once the user
-agrees) and the next step. Keys are checked for presence only. Nothing is
+**What is still missing.** `nebius_setup` checks the part a request needs:
+`sandbox` (each of the above, plus the server's connection and Sandboxes
+access) or `search` (the Tavily key). It answers one line per requirement
+with who does it: the agent, after asking the user (installing uv), or the
+user (the key, the Project ID, Sandboxes access). While uv, the key or the
+Project ID is missing, the server line only waits on them. The Project ID is
+optional for models and is asked for only when a sandbox is wanted. Keys are checked for presence only. Nothing is
 checked or shown until it matters: when the server does not connect, the
 Sandbox pane lists the unmet lines, and a refusal of one of the plugin's own
 tools caused by setup carries the same report. Reconnect in the pane, or the

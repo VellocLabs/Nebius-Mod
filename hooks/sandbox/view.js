@@ -46,7 +46,7 @@ export function paneTree(ui,view,t,actions,now) {
   if (!connected && view.mcp) {
     const reason=view.mcp.authError ?? view.mcp.reason ?? view.mcp.missing?.join(', ') ?? ''
     children.push(text(reason,{color:'red',wrap:'wrap'}))
-    const unmet=(view.setup ?? []).filter(check=>check.state!=='ok')
+    const unmet=(view.setup ?? []).filter(check=>check.state!=='ok'&&check.state!=='waiting')
     if(unmet.length) children.push(Box({key:'setup',flexDirection:'column',children:[
       text(t('setup.title'),{weight:'semibold'}),
       ...unmet.map(check=>text(`✗ ${t(`setup.${check.id}.label`)}: ${t(checkTextKey(check),check.vars)}`,{key:`setup:${check.id}`,wrap:'wrap'})),

@@ -84,7 +84,9 @@ export async function probeSetup($, { parts = PARTS } = {}) {
 
 /**
  * One row per requirement of `parts`, in the order they must be met:
- * `{ id, state: 'ok' | 'missing' | 'failed' | 'unknown', by: 'user' | 'agent', vars? }`.
+ * `{ id, state: 'ok' | 'missing' | 'failed' | 'unknown' | 'waiting', by: 'user' | 'agent', vars? }`.
+ * The server row is `waiting` while uv, the key or the Project ID is unmet: its
+ * failure is their consequence, not a step of its own.
  * `mcp` is the contree connection as the pane holds it; `defaultImage` the option.
  */
 export function setupChecks(facts, { mcp = null, defaultImage = '', parts = PARTS } = {}) {
@@ -96,7 +98,9 @@ export function setupChecks(facts, { mcp = null, defaultImage = '', parts = PART
     const credential = (value, id) => add(id, value === true ? 'ok' : facts.authFile ? 'ok' : value === false ? 'missing' : 'unknown', 'user', value !== true && facts.authFile ? { via: 'auth.ini' } : undefined)
     credential(facts.key, 'key')
     credential(facts.project, 'project')
-    if (!mcp) add('server', 'unknown', 'user')
+    const prerequisiteUnmet = checks.some(check => check.state === 'missing' || check.state === 'failed')
+    if (prerequisiteUnmet && !mcp?.isConnected) add('server', 'waiting', 'agent')
+    else if (!mcp) add('server', 'unknown', 'user')
     else if (!mcp.isConnected) add('server', 'failed', 'user', { reason: String(mcp.reason ?? mcp.message ?? '') })
     else add('server', 'ok', 'user')
     if (mcp?.isConnected) {
@@ -112,9 +116,14 @@ export function setupChecks(facts, { mcp = null, defaultImage = '', parts = PART
   return checks
 }
 
-/** The first row that is not met and stops the part working, else null; a missing default image only means naming one per call. */
+/** A row that is not met and stops the part working: a missing default image only means naming one per call; a waiting server starts by itself. */
+function blocks(check) {
+  return check.state !== 'ok' && check.state !== 'waiting' && check.id !== 'image'
+}
+
+/** The first blocking row, else null. */
 export function firstBlocker(checks) {
-  return checks.find(check => check.state !== 'ok' && check.id !== 'image') ?? null
+  return checks.find(blocks) ?? null
 }
 
 /** The text key a row reads as: `setup.<id>.<state>`, or `.offPath` for uv installed off PATH. */
@@ -125,14 +134,22 @@ export function checkTextKey(check) {
 }
 
 /**
- * The model's reading of `checks` (`t` reads English): one line per row, who
- * fixes what, and the next step. The model relays the user's part; it never
- * asks for a key in chat.
+ * The model's reading of `checks` (`t` reads English): one line per row, then
+ * what the agent does (after asking) and what the user does. The model relays
+ * the user's part; it never asks for a key in chat.
  */
 export function setupReport(checks, t) {
-  const mark = { ok: '✓', missing: '✗', failed: '✗', unknown: '?' }
-  const lines = checks.map(check => `${mark[check.state]} ${t(`setup.${check.id}.label`)}: ${t(checkTextKey(check), check.vars)}${check.state === 'ok' ? '' : ` [${t(`setup.by.${check.by}`)}]`}`)
-  const blocker = firstBlocker(checks)
-  lines.push('', blocker ? t('setup.report.next', { item: t(`setup.${blocker.id}.label`) }) : t('setup.report.ready'))
+  const mark = { ok: '✓', missing: '✗', failed: '✗', unknown: '?', waiting: '·' }
+  const quiet = check => check.state === 'ok' || check.state === 'waiting'
+  const lines = checks.map(check => `${mark[check.state]} ${t(`setup.${check.id}.label`)}: ${t(checkTextKey(check), check.vars)}${quiet(check) ? '' : ` [${t(`setup.by.${check.by}`)}]`}`)
+  const pending = checks.filter(blocks)
+  const names = by => pending.filter(check => check.by === by).map(check => t(`setup.${check.id}.label`)).join(', ')
+  lines.push('')
+  if (pending.length === 0) lines.push(t('setup.report.ready'))
+  else {
+    if (names('agent')) lines.push(t('setup.report.agent', { items: names('agent') }))
+    if (names('user')) lines.push(t('setup.report.user', { items: names('user') }))
+    lines.push(t('setup.report.scope'))
+  }
   return lines.join('\n')
 }

@@ -192,7 +192,6 @@
       "settings": {
         "project_id": {
           "type": "string",
-          "required": true,
           "title": {
             "en": "Project ID",
             "zh-CN": "项目 ID",

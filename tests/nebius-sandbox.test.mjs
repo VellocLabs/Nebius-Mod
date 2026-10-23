@@ -1529,13 +1529,28 @@ test('setup: a clean machine lists every missing piece in order, uv first, who f
   const checks = setupChecks({ uv: { state: 'missing' }, key: false, project: false, tavilyKey: false, authFile: false }, { mcp: { isConnected: false, reason: 'failed' }, defaultImage: '' })
   assert.deepEqual(checks.map(check => [check.id, check.state, check.by]), [
     ['uv', 'missing', 'agent'], ['key', 'missing', 'user'], ['project', 'missing', 'user'],
-    ['server', 'failed', 'user'], ['image', 'missing', 'agent'], ['tavily', 'missing', 'user'],
+    ['server', 'waiting', 'agent'], ['image', 'missing', 'agent'], ['tavily', 'missing', 'user'],
   ])
   assert.equal(firstBlocker(checks).id, 'uv')
   const report = setupReport(checks, tEn)
-  assert.match(report, /✗ uv \(starts the sandbox server\): not installed/)
+  assert.match(report, /✗ uv \(starts the sandbox server\): not installed\. Install it with `winget install/)
   assert.match(report, /Models → Nebius → Project ID/)
-  assert.match(report, /Next: uv/)
+  assert.match(report, /^You do: uv \(starts the sandbox server\)\. Do not hand this to the user: ask once with AskUserQuestion/m)
+  assert.match(report, /^The user does: Nebius API key, Project ID, Tavily API key \(web search\)\./m)
+  assert.doesNotMatch(report, /You do: [^\n]*(Default image|Sandbox server)/, 'neither a missing default image nor a waiting server is a step')
+})
+
+test('setup: a server that cannot start for want of the Project ID waits on it instead of relaying its own error', () => {
+  const reason = 'set NEBIUS_API_KEY and NEBIUS_AI_PROJECT, run contree auth, or set CONTREE_TOKEN'
+  const checks = setupChecks({ uv: { state: 'ok', version: 'uv 0.9.1' }, key: true, project: false, authFile: false }, { mcp: { isConnected: false, reason }, defaultImage: 'tag:python:3.12', parts: ['sandbox'] })
+  assert.deepEqual(checks.find(check => check.id === 'server'), { id: 'server', state: 'waiting', by: 'agent' })
+  const report = setupReport(checks, tEn)
+  assert.doesNotMatch(report, /CONTREE_TOKEN|contree auth/)
+  assert.match(report, /· Sandbox server: starts by itself once the lines above are done\.\n/)
+  assert.doesNotMatch(report, /^You do:/m)
+  assert.match(report, /^The user does: Project ID\./m)
+  const ready = setupChecks({ uv: { state: 'ok' }, key: true, project: true }, { mcp: { isConnected: false, reason: 'boom' }, defaultImage: 'x', parts: ['sandbox'] })
+  assert.match(setupReport(ready, tEn), /✗ Sandbox server: not connected \(boom\)/, 'with nothing else unmet the server\'s own reason is the finding')
 })
 
 test('setup: auth.ini stands in for the key and project; access problems and a ready state are told apart', () => {
@@ -1572,11 +1587,12 @@ test('mod: nebius_setup answers the report without opening the pane or reading a
   const answer = await mod.fire('tool.call', { tool: 'mcp__nebius__nebius_setup', tool_use_id: 't' })
   assert.match(answer.result, /✓ uv \(starts the sandbox server\): uv 0\.9\.1/)
   assert.match(answer.result, /✗ Project ID: not set/)
-  assert.match(answer.result, /Next: Project ID/)
+  assert.match(answer.result, /^The user does: Project ID\./m)
+  assert.doesNotMatch(answer.result, /Tavily/, 'a check without a part covers Sandboxes only')
   assert.doesNotMatch(answer.result, new RegExp(SEALED))
   assert.deepEqual(mod.record.opened, [], 'a setup check is not a sandbox task')
   const search = await mod.fire('tool.call', { tool: 'mcp__nebius__nebius_setup', tool_use_id: 't2', part: 'search' })
-  assert.match(search.result, /^✓ Tavily API key \(web search\): saved\n\nEverything is set up\.$/)
+  assert.match(search.result, /^✓ Tavily API key \(web search\): saved\n\nEverything is set up\. Carry on with the user\'s request now/)
   assert.equal((await mod.fire('tool.check', { tool: 'mcp__nebius__nebius_setup' }, async () => ({ decision: 'ask' }))).decision, 'allow')
 })
 
@@ -1592,11 +1608,24 @@ test('mod: a server that never started puts the setup rows in the pane and after
   for (let i = 0; i < 5; i++) await mod.settle()
   const view = mod.record.state.get('view')
   assert.deepEqual(view.setup.filter(check => check.state !== 'ok').map(check => check.id), ['uv', 'key', 'project', 'server'])
+  assert.equal(view.setup.find(check => check.id === 'server').state, 'waiting')
   const tree = paneTree(elements, view, t, { refresh() {}, reconnect() {}, cancel() {}, drop() {} }, NOW)
   assert.ok(textsOf(tree).some(text => /✗ uv \(starts the sandbox server\): not installed/.test(text)))
+  assert.ok(!textsOf(tree).some(text => /Sandbox server: starts by itself/.test(text)), 'a waiting server is not listed as unmet')
   assert.ok(buttonsOf(tree).some(b => b.props.key === 'reconnect'))
   const made = await mod.fire('tool.call', { tool: 'mcp__nebius__sandbox_lane_new', tool_use_id: 't', name: 'python-dev' })
-  assert.match(made.deny, /^could not look up image tag:python:3\.12: MCP server "contree" is not connected[\s\S]*\n\n✗ uv[\s\S]*Next: uv/)
+  assert.match(made.deny, /^could not look up image tag:python:3\.12: MCP server "contree" is not connected[\s\S]*\n\n✗ uv[\s\S]*\nYou do: uv/)
+  assert.doesNotMatch(made.deny, /Tavily/)
+})
+
+test('manifest: the Project ID is optional, and nebius_setup must name the part it checks', async () => {
+  assert.equal(manifest.providers['token-factory'].settings.project_id.required, undefined)
+  const mod = loadMod({ settings: savedSettings() })
+  await mod.fire('session.start', {})
+  await mod.settle()
+  const schema = mod.record.tools.find(spec => spec.name === 'nebius_setup').inputSchema
+  assert.deepEqual(schema.required, ['part'])
+  assert.deepEqual(schema.properties.part.enum, ['sandbox', 'search'])
 })
 
 test('mod: an empty default image is explained, and the manifest now defaults to tag:python:3.12', async () => {
