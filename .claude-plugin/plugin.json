@@ -1,7 +1,7 @@
 {
   "name": "nebius",
   "version": "1.1.0",
-  "description": "Nebius Token Factory in Velloc: its open-weight models as a provider, and its Sandboxes (isolated microVMs with immutable images) as MCP tools, a status pane, lanes for parallel development and a parallel test matrix.",
+  "description": "Nebius models, cloud sandboxes and Tavily web search in Velloc.",
   "author": {
     "name": "Velloc"
   },
@@ -17,7 +17,7 @@
     "token-factory": {
       "providerApi": 1,
       "displayName": {
-        "en": "Nebius Token Factory"
+        "en": "Nebius"
       },
       "icon": "./icon.svg",
       "defaultBaseUrl": "https://api.tokenfactory.nebius.com/v1",
@@ -34,45 +34,68 @@
             "type": "text",
             "key": "api_key",
             "message": {
-              "en": "Nebius Token Factory API key",
-              "zh-CN": "Nebius Token Factory API 密钥",
-              "ja": "Nebius Token Factory API キー",
-              "ko": "Nebius Token Factory API 키",
-              "es": "Clave de API de Nebius Token Factory",
-              "fr": "Clé API Nebius Token Factory",
-              "de": "Nebius Token Factory API-Schlüssel"
+              "de": "API-Schlüssel",
+              "en": "API key",
+              "es": "Clave de API",
+              "fr": "Clé API",
+              "ja": "API キー",
+              "ko": "API 키",
+              "zh-CN": "API 密钥"
             },
             "placeholder": {
-              "en": "Paste a key created under API keys in Token Factory",
-              "zh-CN": "粘贴在 Token Factory 的 API keys 页面创建的密钥",
-              "ja": "Token Factory の API keys で作成したキーを貼り付けてください",
-              "ko": "Token Factory의 API keys에서 만든 키를 붙여넣으세요",
-              "es": "Pegue una clave creada en API keys de Token Factory",
-              "fr": "Collez une clé créée dans API keys de Token Factory",
-              "de": "Füge einen unter API keys in Token Factory erstellten Schlüssel ein"
+              "de": "Nebius-API-Schlüssel eingeben",
+              "en": "Enter your Nebius API key",
+              "es": "Introduce tu clave de API de Nebius",
+              "fr": "Saisissez votre clé API Nebius",
+              "ja": "Nebius API キーを入力",
+              "ko": "Nebius API 키 입력",
+              "zh-CN": "输入 Nebius API 密钥"
             },
             "secret": true
+          }
+        ],
+        "secrets": [
+          {
+            "name": "tavily_api_key",
+            "label": {
+              "en": "Tavily API key",
+              "zh-CN": "Tavily 密钥",
+              "de": "Tavily-API-Schlüssel",
+              "es": "Clave de API de Tavily",
+              "fr": "Clé API Tavily",
+              "ja": "Tavily API キー",
+              "ko": "Tavily API 키"
+            },
+            "hint": {
+              "de": "Optional · Websuche",
+              "en": "Optional · Web search",
+              "es": "Opcional · Búsqueda web",
+              "fr": "Facultatif · Recherche web",
+              "ja": "任意 · ウェブ検索",
+              "ko": "선택 사항 · 웹 검색",
+              "zh-CN": "可选 · 联网搜索"
+            }
           }
         ]
       },
       "modelsUi": {
         "intro": {
-          "en": "Models are grouped by the company that makes them. Only models that can call tools are listed.",
-          "zh-CN": "模型按其所属公司分组;只列出支持工具调用的模型。",
-          "ja": "モデルは提供元の会社ごとに分類されています。ツール呼び出しに対応したモデルのみ表示されます。",
-          "ko": "모델은 만든 회사별로 묶여 있습니다. 도구 호출을 지원하는 모델만 표시됩니다.",
-          "es": "Los modelos se agrupan por la empresa que los desarrolla; solo se muestran los que pueden llamar herramientas.",
-          "fr": "Les modèles sont regroupés par entreprise ; seuls ceux qui savent appeler des outils sont listés.",
-          "de": "Die Modelle sind nach dem Unternehmen gruppiert, das sie herstellt; aufgeführt sind nur Modelle, die Tools aufrufen können."
+          "de": "Modelle mit Tool-Unterstützung",
+          "en": "Models with tool support",
+          "es": "Modelos con uso de herramientas",
+          "fr": "Modèles compatibles avec les outils",
+          "ja": "ツール呼び出し対応モデル",
+          "ko": "도구 호출 지원 모델",
+          "zh-CN": "支持工具调用的模型"
         },
         "empty": {
-          "en": "Models appear once your API key is saved. If they don't, check the key, then refresh the list.",
-          "zh-CN": "保存 API 密钥后即可看到模型。如果仍未出现,请检查密钥,然后刷新列表。",
-          "ja": "API キーを保存するとモデルが表示されます。表示されない場合は、キーを確認してから一覧を更新してください。",
-          "ko": "API 키를 저장하면 모델이 표시됩니다. 표시되지 않으면 키를 확인한 뒤 목록을 새로 고치세요.",
-          "es": "Los modelos aparecen cuando se guarda la clave de API. Si no aparecen, compruebe la clave y actualice la lista.",
-          "fr": "Les modèles apparaissent une fois la clé API enregistrée. Sinon, vérifiez la clé, puis actualisez la liste.",
-          "de": "Die Modelle erscheinen, sobald dein API-Schlüssel gespeichert ist. Falls nicht, prüfe den Schlüssel und aktualisiere die Liste."
+          "de": "API-Schlüssel speichern, um Modelle zu laden.",
+          "en": "Save your API key to load models.",
+          "es": "Guarda tu clave de API para cargar los modelos.",
+          "fr": "Enregistrez votre clé API pour charger les modèles.",
+          "ja": "API キーを保存するとモデルが表示されます。",
+          "ko": "API 키를 저장하면 모델이 표시됩니다.",
+          "zh-CN": "保存 API 密钥后加载模型。"
         },
         "links": [
           {
@@ -89,13 +112,13 @@
           },
           {
             "label": {
-              "en": "Token Factory docs",
-              "zh-CN": "Token Factory 文档",
-              "ja": "Token Factory ドキュメント",
-              "ko": "Token Factory 문서",
-              "es": "Documentación de Token Factory",
-              "fr": "Documentation Token Factory",
-              "de": "Token-Factory-Dokumentation"
+              "de": "Dokumentation",
+              "en": "Docs",
+              "es": "Documentación",
+              "fr": "Documentation",
+              "ja": "ドキュメント",
+              "ko": "문서",
+              "zh-CN": "文档"
             },
             "url": "https://docs.tokenfactory.nebius.com/"
           }
@@ -160,15 +183,33 @@
           "zai-org/GLM-5.3-Flash"
         ]
       },
-      "module": "./providers/nebius.js"
+      "module": "./providers/nebius.js",
+      "settings": {
+        "project_id": {
+          "type": "string",
+          "title": {
+            "en": "Project ID",
+            "zh-CN": "项目 ID",
+            "de": "Projekt-ID",
+            "es": "ID del proyecto",
+            "fr": "ID du projet",
+            "ja": "プロジェクト ID",
+            "ko": "프로젝트 ID"
+          },
+          "description": {
+            "de": "Nur für Sandboxes",
+            "en": "For sandboxes only",
+            "es": "Solo para entornos aislados",
+            "fr": "Pour les environnements isolés uniquement",
+            "ja": "サンドボックス用",
+            "ko": "샌드박스 전용",
+            "zh-CN": "仅用于沙箱"
+          }
+        }
+      }
     }
   },
   "userConfig": {
-    "project_id": {
-      "type": "string",
-      "title": "Project ID",
-      "description": "The Nebius AI project the sandboxes run in (sent as the Project header). The key is the one saved for the Nebius Token Factory provider on the Models page. Both are needed; with either missing the server falls back to ~/.config/contree/auth.ini."
-    },
     "default_image": {
       "type": "string",
       "title": "Default image",

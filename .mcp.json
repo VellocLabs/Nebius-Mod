@@ -12,6 +12,13 @@
         "NEBIUS_AI_PROJECT": "${user_config.project_id}",
         "CONTREE_NO_UPDATE_CHECK": "1"
       }
+    },
+    "tavily": {
+      "headers": {
+        "Authorization": "Bearer ${provider_secret.token-factory.tavily_api_key}"
+      },
+      "type": "http",
+      "url": "https://mcp.tavily.com/mcp/"
     }
   }
 }

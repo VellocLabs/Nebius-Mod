@@ -14,6 +14,7 @@
  *   touch only the sandbox; the ones that read or write local files still ask.
  */
 
+import { registerTavily } from './tavily.js'
 import {
   CONTREE_SERVER,
   REMOTE_ONLY_TOOLS,
@@ -33,7 +34,7 @@ import { isActive, missingPermissions, operationIdOf, replyOf, resultImageOf } f
 import { MATRIX_SCHEMA, planMatrix, summarize } from './sandbox/matrix.js'
 import { normalizeOperations, paneTree } from './sandbox/view.js'
 import { loadTexts } from './sandbox/texts.js'
-import { safeDetail } from './sandbox/details.js'
+import { createTaskHistory, historyDetail, historyRows, sanitizeTask } from './sandbox/history.js'
 import { createImageCatalog } from './sandbox/images.js'
 import { createFileBrowser } from './sandbox/files.js'
 import { migrateLanes, readGlobalLanes, writeLaneChanges } from './sandbox/storage.js'
@@ -74,7 +75,7 @@ const OWN_TOOLS = {
     inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
   },
   sandbox_lane_patch: {
-    description: 'Take the changes of a lane out as a git patch: runs `git add -A` and `git diff --cached --binary <since>` in the lane\'s head (a throw-away run) and returns the patch, or writes it to `out` (a local path) and returns a summary. Apply it locally with `git apply`.',
+    description: 'Take the changes of a lane out as a git patch: runs `git add -A` and `git diff --cached --binary <since>` in the lane\'s head (a throw-away run) and returns the patch, or writes it to `out` (a local path) and returns a summary. Apply it locally with `git apply --index`, one lane at a time. The lane\'s image needs git and the project\'s `.git` (sync without excluding `.git`); work left uncommitted in the image is what the patch carries.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -87,7 +88,7 @@ const OWN_TOOLS = {
     },
   },
   sandbox_test_matrix: {
-    description: `Run up to 50 commands at once, each in its own throw-away microVM started from the same image, wait for all of them, and answer one summary: passed/failed per shard and the output tail of every shard that did not pass. Use it for test shards, a version matrix or flaky-test repeats.`,
+    description: `Run up to 50 commands at once, each in its own throw-away microVM started from the same image, wait for all of them, and answer one summary: passed/failed per shard and the output tail of every shard that did not pass. Use it for test shards, a version matrix or flaky-test repeats. Start it from an image that already has the dependencies installed (a run with disposable:false, or a lane), so no shard installs them again.`,
     inputSchema: MATRIX_SCHEMA,
   },
 }
@@ -119,6 +120,7 @@ function optionNumber(value, fallback) {
 }
 
 export function register(on, options = {}) {
+  registerTavily(on)
   const config = {
     defaultImage: optionString(options.default_image),
     maxRunSeconds: optionNumber(options.max_run_seconds, 1800),
@@ -136,31 +138,87 @@ export function register(on, options = {}) {
   let callSeq = 0
   let detailSeq = 0
   let clearedBefore = 0
+  let history = null
+  let historyGeneration = ''
+  let historyRecords = []
   let latestSeq = 0
+
+  // Pending is live only when this runtime still owns the actual call. Other
+  // sessions/restarts display uncertainty without mutating another owner's record.
+  function presentedTask(task) {
+    return task?.pending && !view.calls.some(call => call.id === task.callId)
+      ? { ...task, pending: false, async: false, interrupted: true }
+      : task
+  }
+
+  async function reloadHistory() {
+    const saved = await history?.load()
+    if (!saved) return
+    if (saved.generation !== historyGeneration) {
+      latestSeq++
+      detailSeq++
+      tracked.clear()
+      view = { ...view, latestTask: null, operationDetail: null, ops: [], taskDisclosure: null }
+    }
+    historyGeneration = saved.generation
+    clearedBefore = saved.before
+    historyRecords = saved.records
+    callRecords.clear()
+    for (const task of historyRecords) {
+      const id = task.id || task.recordId
+      if (!callRecords.has(id)) callRecords.set(id, task)
+    }
+    const remote = view.ops.filter(op => !op.local && (op.createdAt ?? 0) > clearedBefore)
+    const latest = presentedTask(historyRecords[0])
+    view = { ...view, ops: historyRows(historyRecords.map(presentedTask), remote), latestTask: latest && (!view.latestTask || latest.startedAt >= (view.latestTask.startedAt ?? 0)) ? latest : view.latestTask }
+  }
+
+  async function saveTask(task) {
+    await history?.save(task)
+    await reloadHistory()
+  }
+
+  async function remoteTask($, id, existing) {
+    const seed = existing
+    if (!seed || seed.generation !== historyGeneration || (seed.summary && seed.startedAt <= clearedBefore)) return null
+    const value = await callContree($, 'get_operation', { operation_id: id })
+    const task = { ...seed, id, remote: true, summary: false, pending: false, async: isActive(value), value: historyDetail(value), error: undefined }
+    await saveTask(task)
+    return task
+  }
   async function refreshLatest($, id) {
     const seq = ++latestSeq
     const existing = view.latestTask
     try {
-      const value = await callContree($, 'get_operation', { operation_id: id })
-      if (seq !== latestSeq || view.latestTask !== existing) return
-      const record = callRecords.get(id)
-      view = { ...view, latestTask: { ...(existing?.id === id ? existing : {}), id, remote: true, value: safeDetail(value), method: record?.method ?? (existing?.id === id ? existing.method : undefined), args: record?.args, pending: false, async: false, startedAt: existing?.id === id ? existing.startedAt : Date.parse(value.created_at) || null } }
+      const task = await remoteTask($, id, callRecords.get(id))
+      if (!task || seq !== latestSeq || task.generation !== historyGeneration) return
+      if (!view.latestTask || view.latestTask.id === id || view.latestTask === existing) view = { ...view, latestTask: task }
     } catch (error) {
-      if (seq === latestSeq && view.latestTask === existing) view = { ...view, latestTask: { ...(existing?.id === id ? existing : {}), id, remote: true, error: messageOf(error) } }
+      if (seq === latestSeq && view.latestTask === existing) view = { ...view, latestTask: { ...(existing?.id === id ? existing : {}), id, remote: true, error: historyDetail(messageOf(error)) } }
     }
     await publish($)
   }
   const callRecords = new Map()
-  async function inspectOperation(id) {
+  async function inspectOperation(id, force = false) {
+    await reloadHistory()
+    const cached = callRecords.get(id)
+    if (!cached && !view.ops.some(op => op.id === id)) return
+    if (!force && cached && !cached.summary && (cached.value !== undefined || cached.error || cached.pending)) {
+      detailSeq++
+      view = { ...view, operationDetail: presentedTask(cached) }
+      await publish(root)
+      return
+    }
+    // Capture the generation before publishing (which can yield to Clear).
+    const seed = cached ?? await history?.begin({ id, remote: true, summary: true, startedAt: view.ops.find(op => op.id === id)?.createdAt ?? 0 })
     const seq = ++detailSeq
-    view = { ...view, operationDetail: { id, loading: true } }
+    view = { ...view, operationDetail: { ...presentedTask(cached), id, loading: true } }
     await publish(root)
     try {
-      const value = await callContree(root, 'get_operation', { operation_id: id })
-      const record = callRecords.get(id)
-      if (seq === detailSeq) view = { ...view, operationDetail: { id, value: safeDetail(value), method: record?.method, args: record?.args } }
+      const task = await remoteTask(root, id, seed)
+      if (task && seq === detailSeq && task.generation === historyGeneration) view = { ...view, operationDetail: task }
     } catch (error) {
-      if (seq === detailSeq) view = { ...view, operationDetail: { id, error: messageOf(error) } }
+      if (seq === detailSeq) view = { ...view, operationDetail: { ...presentedTask(cached), id, loading: false, error: historyDetail(messageOf(error)) } }
     }
     if (seq === detailSeq) await publish(root)
   }
@@ -269,23 +327,31 @@ export function register(on, options = {}) {
     refreshing = true
     try {
       await reloadLanes($)
+      await reloadHistory()
       const blocked = () => !view.mcp?.isConnected || view.mcp.authError || view.mcp.missing
       if (blocked()) await checkServer($)
       if (blocked()) return
       const identity = await callContree($, 'whoami', {})
       view = { ...view, quota: quotaOf(identity) }
+      const listGeneration = historyGeneration
       const reply = await callContree($, 'list_operations', { limit: 20 })
-      clearedBefore = Number(await $.store.get('history-cleared-before')) || 0
-      const ops = normalizeOperations(reply, tracked).filter(op => (op.createdAt ?? 0) > clearedBefore)
+      await reloadHistory()
+      const ops = normalizeOperations(reply, tracked, 50).filter(op => (op.createdAt ?? 0) > clearedBefore)
+      await history?.summaries(ops, listGeneration)
+      await reloadHistory()
+      for (const task of historyRecords.filter(task => !task.summary && task.remote && task.id && !task.pending && (task.async || isActive(task.value)))) {
+        try { await remoteTask($, task.id, task) } catch { /* Keep the last offline snapshot, retry next poll. */ }
+      }
       for (const operation of reply?.operations ?? []) await catalog.observe(operation)
       for (const [id, entry] of tracked) {
         const op = ops.find(each => each.id === id)
         if ((op && !isActive(op)) || now() - entry.startedAt > TRACK_KEEP_MS) tracked.delete(id)
       }
-      view = { ...view, ops, updatedAt: now(), error: null }
+      await reloadHistory()
+      view = { ...view, ops: historyRows(historyRecords.map(presentedTask), ops.filter(op => (op.createdAt ?? 0) > clearedBefore)), updatedAt: now(), error: null }
       const latest = view.latestTask
-      if (!latest && ops[0]) await refreshLatest($, ops[0].id)
-      else if (latest?.remote && !latest.pending && (latest.async || isActive(latest.value))) await refreshLatest($, latest.id)
+      if (latest?.summary) await refreshLatest($, latest.id)
+      else if (!latest && view.ops[0]) await refreshLatest($, view.ops[0].id)
     } catch (error) {
       view = { ...view, updatedAt: now(), error: messageOf(error) }
     } finally {
@@ -298,7 +364,7 @@ export function register(on, options = {}) {
     if (poller) return
     poller = $.clock.every(TICK_MS, () => {
       ticks += 1
-      const busy = view.calls.length > 0 || tracked.size > 0 || view.ops.some(isActive) || view.latestTask?.async || isActive(view.latestTask?.value)
+      const busy = view.calls.length > 0 || tracked.size > 0 || view.ops.some(op => !op.interrupted && isActive(op)) || view.latestTask?.async || isActive(view.latestTask?.value)
       if (!busy && !paneOpen) return
       if (!busy && ticks % IDLE_TICKS !== 0) return
       void refresh(root)
@@ -316,11 +382,13 @@ export function register(on, options = {}) {
     clearHistory: async () => {
       const answer = await root.ui.ask(t('history.confirm'), [t('history.clear'), t('action.keep')]).catch(() => null)
       if (answer !== t('history.clear')) return
-      clearedBefore = now()
-      await root.store.set('history-cleared-before', clearedBefore)
+      try { await history.clear() } catch { return }
+      latestSeq++
       detailSeq++
+      tracked.clear()
       callRecords.clear()
-      view = { ...view, ops: [], operationDetail: null }
+      view = { ...view, latestTask: null, ops: [], operationDetail: null, taskDisclosure: null }
+      await reloadHistory()
       await publish(root)
     },
     backLatest: async () => {
@@ -385,7 +453,12 @@ export function register(on, options = {}) {
     toggleDirectory: path => browser.toggle(path),
     selectFile: entry => browser.selectFile(entry),
     refreshFiles: () => browser.refresh(),
-    refresh: async () => { await refresh(root); await browser.refresh() },
+    refresh: async () => {
+      await refresh(root)
+      const selected = view.operationDetail
+      if (selected?.id && selected.remote) await inspectOperation(selected.id, true)
+      await browser.refresh()
+    },
     reconnect: async () => {
       view = { ...view, mcp: null }
       await checkServer(root)
@@ -550,6 +623,8 @@ export function register(on, options = {}) {
 
   on('session.start', async ($, e, next) => {
     root = $
+    history = createTaskHistory($.store)
+    await reloadHistory()
     // Clear any composer status left by an older plugin version; all status lives in the pane.
     await $.ui.status(undefined).catch(() => undefined)
     t = await loadTexts($)
@@ -570,16 +645,21 @@ export function register(on, options = {}) {
   // Outer observer: preserve the existing guards and results; never count our own polling.
   on('tool.call', { tool: [...contreeToolNames(ALL_CONTREE_TOOLS), ...Object.keys(OWN_TOOLS).map(ownToolName)] }, async ($, e, next) => {
     await reloadLanes($)
-    const id = `${e.tool_use_id ?? 'call'}:${++callSeq}`
+    await reloadHistory()
+    let id = `call:${++callSeq}`
     const started = now()
     const lane = laneFor(e)
     const { tool_use_id, agentId: caller, ...taskInput } = e
     latestSeq++
-    view = { ...view, latestTask: { callId: id, method: e.tool, args: safeDetail(taskInput), startedAt: started, pending: true, timeout: e.tool === 'mcp__contree__run' ? Math.min(e.timeout ?? 30, config.maxRunSeconds) : e.timeout, disposable: e.tool === 'mcp__contree__run' ? e.disposable !== false : undefined }, totalCalls: view.totalCalls + 1, selectedLane: lane && lanes[lane] ? lane : view.selectedLane, calls: [...view.calls, { id, tool: e.tool, lane, started }] }
+    let task = await history?.begin({ callId: id, method: e.tool, args: taskInput, startedAt: started, pending: true, timeout: e.tool === 'mcp__contree__run' ? Math.min(e.timeout ?? 30, config.maxRunSeconds) : e.timeout, disposable: e.tool === 'mcp__contree__run' ? e.disposable !== false : undefined })
+    if (task) { id = task.recordId; task = { ...task, callId: id } }
+    const liveTask = task ?? historyDetail({ callId: id, method: e.tool, args: taskInput, startedAt: started, pending: true })
+    view = { ...view, latestTask: liveTask, totalCalls: view.totalCalls + 1, selectedLane: lane && lanes[lane] ? lane : view.selectedLane, calls: [...view.calls, { id, tool: e.tool, lane, started }] }
     if (statsKey) {
       const totalCalls = view.totalCalls
       saveStatsQueue = saveStatsQueue.then(() => $.store.set(statsKey, { totalCalls })).catch(() => undefined)
     }
+    await saveTask(task)
     await publish($)
     // Automatic opening never takes keyboard focus from the prompt.
     if (!e.agentId) await openPanel($).catch(() => undefined)
@@ -600,20 +680,22 @@ export function register(on, options = {}) {
         tool: e.tool, callSeconds: (now() - started) / 1000, duration: metric('duration'), cpu: metric('consumed_cpu'), memory: metric('consumed_memory'), exit: metric('exit_code'), failed,
         async: e.wait === false && !failed,
       } }
-      if (view.latestTask?.callId === id) {
-        const remote = ['mcp__contree__run','mcp__contree__import_image'].includes(e.tool)
-        view = { ...view, latestTask: { ...view.latestTask, pending: false, failed: !!failure || !!answer?.deny || answer?.isError === true || answer?.result?.isError === true, async: remote && e.wait === false && !failed, remote, id: remote ? operationIdOf(data) : null, finishedAt: now(), callSeconds: (now()-started)/1000, value: safeDetail(data && typeof data === 'object' ? data : { output: data }), error: failure ? messageOf(failure) : answer?.deny, laneAdvanced: lane && resultImageOf(data) === lanes[lane]?.head ? lane : null } }
+      const remote = ['mcp__contree__run','mcp__contree__import_image'].includes(e.tool)
+      const completed = sanitizeTask({ ...liveTask, args: taskInput, pending: false, failed, async: remote && e.wait === false && !failed, remote, id: remote ? operationIdOf(data) : null, finishedAt: now(), callSeconds: (now()-started)/1000, value: data && typeof data === 'object' ? data : { output: data }, error: failure ? messageOf(failure) : answer?.deny, laneAdvanced: lane && resultImageOf(data) === lanes[lane]?.head ? lane : null })
+      if (view.latestTask?.callId === id) view = { ...view, latestTask: completed }
+      task = task ? { ...completed, recordId: task.recordId, generation: task.generation } : null
+      await saveTask(task)
+      if (!failure && !answer?.deny) {
+        const results = e.tool === 'mcp__contree__wait_operations' ? data?.results : e.tool === 'mcp__contree__get_operation' ? { [e.operation_id]: data } : null
+        for (const [operation, value] of Object.entries(results ?? {})) {
+          const previous = callRecords.get(operation)
+          if (previous?.remote) await saveTask({ ...previous, value: historyDetail(value), pending: false, async: isActive(value), error: undefined })
+        }
       }
       if (e.tool === 'mcp__contree__whoami' && !failed) view = { ...view, quota: quotaOf(data) }
       if (lane && lanes[lane] && !failed) view = { ...view, selectedLane: lane }
       if (data && typeof data === 'object') {
         await catalog.observe(data)
-        const operation = operationIdOf(data)
-        if (operation && ['mcp__contree__run', 'mcp__contree__import_image'].includes(e.tool)) {
-          const { tool_use_id, agentId, ...input } = e
-          callRecords.set(operation, { method: e.tool, args: safeDetail(input) })
-          if (callRecords.size > 100) callRecords.delete(callRecords.keys().next().value)
-        }
       }
       await publish($)
       if (paneOpen) void syncBrowser()
@@ -652,6 +734,17 @@ export function register(on, options = {}) {
     }
   })
 
+  on('tool.check', { tool: [...contreeToolNames(ALL_CONTREE_TOOLS), ...Object.keys(OWN_TOOLS).map(ownToolName)] }, async ($, e, next) => {
+    const seed = await history?.begin({ method: e.tool, args: e.input ?? {}, startedAt: now(), pending: false, failed: true })
+    const verdict = await next(e)
+    if (verdict?.decision === 'deny' && seed) {
+      const task = sanitizeTask({ ...seed, args: e.input ?? {}, error: verdict.reason ?? 'Denied' })
+      await saveTask(task)
+      await publish($)
+    }
+    return verdict
+  })
+
   if (config.autoApprove) {
     const approved = [...contreeToolNames(REMOTE_ONLY_TOOLS), ...AUTO_APPROVED_OWN.map(ownToolName)]
     on('tool.check', { tool: approved }, async ($, e, next) => {
@@ -669,6 +762,7 @@ export function register(on, options = {}) {
 
   on('command.run', { command: COMMAND }, async ($, e) => {
     await reloadLanes($)
+    await reloadHistory()
     if (e.args.trim() === 'lanes') return { text: t('command.lanes', { lanes: describeLanes(lanes) }) }
     view = { ...view, section: 'tasks' }
     await publish($)

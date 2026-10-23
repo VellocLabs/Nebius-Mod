@@ -17,13 +17,15 @@ export function detailTree(ui, detail, t, options = {}) {
   const { Box, Text, Code, Button } = ui
   const children = []
   if (!detail) return Box({children})
-  const block = (title, data, color) => {
+  const block = (title, data, color, key) => {
     if (data === undefined || data === null || data === '') return
     const cleaned = safeDetail(data)
     const source = typeof cleaned === 'string' ? cleaned : JSON.stringify(cleaned, null, 2)
     if (!source?.trim()) return
-    children.push(Text({weight:'semibold',color,children:[title]}),Code({source:source.slice(0,8000),language:typeof cleaned==='string'?'text':'json',wrap:'wrap'}))
-    if(source.length>8000) children.push(Text({dimColor:true,children:[t('detail.truncated')]}))
+    const content = [Text({weight:'semibold',color,children:[title]}),Code({source:source.slice(0,8000),language:typeof cleaned==='string'?'text':'json',wrap:'wrap'})]
+    if(source.length>8000) content.push(Text({dimColor:true,children:[t('detail.truncated')]}))
+    if(key) children.push(Box({key,flexDirection:'column',gap:0.5,borderStyle:'round',borderDimColor:true,padding:1,children:content}))
+    else children.push(...content)
   }
   if(detail.loading) children.push(Text({children:[t('detail.loading')]}))
   if(detail.error) children.push(Text({color:'red',wrap:'wrap',children:[String(safeDetail(detail.error))]}))
@@ -34,8 +36,8 @@ export function detailTree(ui, detail, t, options = {}) {
     const stderr=stream(value.stderr ?? value.metadata?.result?.stderr)
     const hasOut=typeof stdout === 'string' && stdout.trim() !== ''
     const hasErr=typeof stderr === 'string' && stderr.trim() !== ''
-    if(hasOut) block(t('taskView.output'),stdout)
-    if(hasErr) block('stderr',stderr,'red')
+    if(hasOut) block(t('taskView.output'),stdout,undefined,'task-output')
+    if(hasErr) block('stderr',stderr,'red','task-stderr')
     if(!hasOut && !hasErr && !detail.pending) children.push(Text({dimColor:true,children:[t('taskView.noOutput')]}))
     const method=detail.method ?? value.metadata?.input?.command ?? value.command
     const hasArgs=detail.args && Object.keys(detail.args).length>0

@@ -8,6 +8,6 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test tests/nebius-mod.test.mjs tests/nebius-sandbox.test.mjs"
+    "test": "node --test tests/nebius-mod.test.mjs tests/nebius-sandbox.test.mjs tests/nebius-tavily.test.mjs tests/nebius-task-metrics.test.mjs"
   }
 }

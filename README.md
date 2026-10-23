@@ -1,11 +1,10 @@
 # Nebius Token Factory plugin
 
-Two parts, one plugin:
+Three parts, one plugin:
 
-- **A model provider** (below): Nebius Token Factory on Velloc's Models page.
-- **Sandboxes** ([further down](#sandboxes)): isolated cloud microVMs with
-  immutable images, as MCP tools, with a status pane, lanes for parallel
-  development and a parallel test matrix.
+- **Models:** Nebius Token Factory on Velloc's Models page.
+- **Sandboxes:** cloud execution, parallel development and tests.
+- **Web search:** Tavily tools and a search history panel.
 
 ## Model provider
 
@@ -80,11 +79,12 @@ ends in a new one. Nothing a run does touches this machine.
    it into the MCP server's environment (`NEBIUS_API_KEY`) only, sealed until
    the server starts; the model, the mod and the transcript never see it.
    Saving, replacing or removing that key restarts the server with it.
-3. Settings → Plugins & Mods → **nebius**: the **Project ID**. With the key or
-   the project missing the server reads `~/.config/contree/auth.ini` instead
-   (written by `contree auth`).
-4. Optional: a **Default image** (`tag:python:3.12`, or a UUID), the
-   **Longest run**, and **Approve remote-only sandbox tools**.
+3. Models → **Nebius Token Factory**: enter the **Project ID** for sandboxes.
+   Existing saved project IDs are retained. With the key or project missing,
+   the server reads `~/.config/contree/auth.ini` instead (written by `contree auth`).
+4. Settings → Plugins & Mods → **nebius** keeps the optional **Default image**
+   (`tag:python:3.12`, or a UUID), **Longest run**, and
+   **Approve remote-only sandbox tools**. Their defaults are unchanged.
 
 Needs a Velloc build that fills `${user_config.*}` and `${provider_key.*}`
 in a plugin's MCP server configuration; an older one passes the placeholder
@@ -96,7 +96,6 @@ through as text and the server cannot authenticate.
 |---|---|
 | `.mcp.json` — server `contree` | The contree tools: `run`, `rsync`, `upload`, `download`, `import_image`, `list_images`, `get_image`, `set_tag`, `list_files`, `read_file`, `grep`, `get_operation`, `list_operations`, `wait_operations`, `cancel_operation`, `get_guide` (as `mcp__contree__*`) |
 | Session mod `hooks/sandbox.js` | Lanes, guards, the plugin's own tools, the Sandbox pane and status line (below) |
-| Skills | `sandbox-workflow`, `sandbox-parallel-test`, `sandbox-parallel-dev`, `sandbox-swe-env` |
 | Agents | `nebius:sandbox-dev` (builds one part in its own lane, never writes local files), `nebius:sandbox-tester` (runs tests only) |
 
 **Lanes.** A lane is a named chain of images. `image: "lane:<name>"` in any
@@ -134,6 +133,16 @@ something runs and every 30 s while the pane is open and idle. The status line
 reads *Sandbox: N lanes · M running* while there is something to say.
 `/sandbox lanes` prints the lanes.
 
+**Local task history.** The latest 50 task records are retained in the plugin's
+local store across sessions and restarts, with bounded, redacted request and
+result previews. Saved history remains available when the sandbox service is
+offline or refuses access. Remote operation updates supplement those records;
+local history is not a live status guarantee. Clearing history removes only
+sandbox task records and hides earlier cloud operations, including results of
+calls already in flight; it does not delete lanes, images or Tavily history.
+Tasks from before local recording was enabled can only be recovered if the
+service still returns them. Full logs may be truncated.
+
 **Approve remote-only sandbox tools** (off by default) answers the permission
 check of the tools that touch only the sandbox (`run`, the image, file-read
 and operation tools, and the plugin's own tools except `sandbox_lane_patch`)
@@ -143,12 +152,43 @@ need this setting (or allow rules for `mcp__contree` and `mcp__nebius`).
 
 ### Parallel work
 
-- **Tests:** `sandbox_test_matrix` on one image (see the
-  `sandbox-parallel-test` skill).
+- **Tests:** `sandbox_test_matrix` on one image that already has the
+  dependencies installed.
 - **Development:** one lane and one `nebius:sandbox-dev` background agent per
   independent part; the main conversation alone writes local files, merging
-  each lane with `sandbox_lane_patch` and `git apply` (see the
-  `sandbox-parallel-dev` skill).
+  each lane with `sandbox_lane_patch` and `git apply --index`, one lane at
+  a time.
+
+## Tavily
+
+In Models → **Nebius Token Factory**, save an optional **Tavily API key**.
+It is separate from the Nebius key and is sent only to the Tavily MCP server
+in an HTTPS Authorization header, never to contree or the model API.
+Leaving it unset keeps models and sandboxes usable; Tavily requires setup.
+
+The hosted MCP server provides Search, Extract, Map, Crawl and Research.
+It sends no usage instructions and its tool definitions are small, so Velloc
+offers its tools directly instead of behind a Skill. No CLI or global
+installation is needed. Tool calls retain the normal
+permission checks; the sandbox auto-approval option does not approve Tavily.
+
+`/tavily` opens the search panel; `/sandbox` remains unchanged. Dynamic mod
+commands currently use short names, with their plugin shown as the source,
+not a `/nebius:` prefix. Search calls open the panel and retain a bounded
+local history of queries, result summaries, elapsed time and returned credits.
+The panel lets you inspect and clear that history. Clearing local records
+neither removes Tavily's server-side logs nor resets account usage.
+
+Recorded call counts and reported credits cover local history only, not the
+whole account. Missing credits are unknown, not zero. Tavily's separate
+`GET /usage` API exposes plan and API-key credit usage and limits, but the
+hosted MCP integration does not provide that account view here. Currency
+charges depend on the account's plan and are not inferred from credits.
+
+This version needs a Velloc runtime supporting provider settings in MCP
+`${user_config.*}` references and declared named credentials through
+`${provider_secret.<provider>.<secret>}` in origin-bound HTTPS headers.
+Older runtimes cannot use the moved Project ID or Tavily credential route.
 
 ## Files
 
@@ -168,7 +208,6 @@ hooks/sandbox/view.js        the pane and the status line (pure)
 hooks/sandbox/replies.js     the server's reply shapes: unwrapping, status, ids (pure)
 hooks/sandbox/texts.js       the per-language text loader
 locales/*.json               the mod's text, English first
-skills/*/SKILL.md            the four skills
 agents/*.md                  the two agent types
 ```
 

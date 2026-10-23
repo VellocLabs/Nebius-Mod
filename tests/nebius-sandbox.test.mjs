@@ -31,6 +31,7 @@ import { imageRows, createImageCatalog } from '../hooks/sandbox/images.js'
 import { localTime, safeDetail } from '../hooks/sandbox/details.js'
 import { taskOutcome, persistenceOf } from '../hooks/sandbox/tasks.js'
 import { register } from '../hooks/sandbox.js'
+import { createTaskHistory, historyDetail, HISTORY_PREFIX, HISTORY_RECORD_BYTES } from '../hooks/sandbox/history.js'
 import { isActive, missingPermissions, operationIdOf as opIdOf, replyOf, resultImageOf as imageOf, statusOf } from '../hooks/sandbox/replies.js'
 
 const pluginDir = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -436,9 +437,12 @@ test('mod: session.start registers the six tools and /sandbox, starts one poller
     assert.equal(spec.inputSchema.type, 'object')
     assert.ok(spec.description.length > 20)
   }
-  assert.deepEqual(mod.record.commands, [{ name: 'sandbox', description: '打开 Nebius 沙箱面板', argumentHint: '[lanes]' }])
+  assert.deepEqual(mod.record.commands, [
+    { name: 'tavily', description: ZH['tavily.command'] },
+    { name: 'sandbox', description: '打开 Nebius 沙箱面板', argumentHint: '[lanes]' },
+  ])
   assert.equal(mod.record.timers.length, 1)
-  assert.equal(mod.hooks.some(hook => hook.event === 'tool.check'), false, 'nothing is approved unless the option says so')
+  assert.equal((await mod.fire('tool.check', { tool: 'mcp__contree__run' }, async () => ({ decision: 'ask' }))).decision, 'ask', 'nothing is approved unless the option says so')
 })
 
 test('mod: a lane whose base image cannot be looked up is refused with the reason the server gave', async () => {
@@ -945,7 +949,7 @@ test('pane styling: colored connection, red clear button, no detail blocks outsi
   const tree = paneTree(elements, { ...base, section: 'tasks', showHistory: true, mcp: { isConnected: false } }, tr, actions, NOW)
   assert.ok(flatten(tree).some(n => n.type === 'Text' && n.props.color === 'red' && n.children.includes('连接异常')))
   const clear = buttonsOf(tree).find(b => b.props.key === 'clear-history')
-  assert.equal(clear.props.label, 'Clear')
+  assert.equal(clear.props.label, ZH['history.clear'])
   assert.equal(clear.children[0].props.color, 'red')
   assert.equal(buttonsOf(tree).find(b => b.props.key === 'section:tasks').props.label, 'Tasks (0)')
 })
@@ -1040,16 +1044,16 @@ test('Tasks concise metrics and image link navigate to the selected snapshot fil
     await mod.settle()
     let tree = await mod.fire('ui.render', { component: 'Pane', requestId: 'sandbox' })
     const texts = textsOf(tree)
-    for (const metric of ['Duration: 0.446', 'CPU: 0.024075', 'Memory: 10888']) assert.ok(texts.includes(metric))
-    assert.ok(texts.indexOf('Image:') < texts.indexOf('Operation:'))
+    for (const metric of ['446 ms', '24 ms', '11.15 MB']) assert.ok(texts.includes(metric))
+    assert.ok(texts.indexOf(EN['taskMetrics.sourceImage']) < texts.indexOf(EN['taskMetrics.operation']))
     const source = buttonsOf(tree).find(b => b.props.key === 'task-source-image')
     const result = buttonsOf(tree).find(b => b.props.key === 'task-result-image')
     assert.equal(source.props.label, 'source-image')
     assert.equal(!!result, saved)
-    assert.equal(texts.includes('Result Image:'), saved)
+    assert.ok(texts.includes(EN['taskMetrics.resultImage']))
     if (saved) {
       assert.equal(result.props.label, 'result-image')
-      assert.ok(texts.indexOf('Result Image:') < texts.indexOf('Operation:'))
+      assert.ok(texts.indexOf(EN['taskMetrics.resultImage']) < texts.indexOf(EN['taskMetrics.operation']))
     }
     for (const link of [source, result].filter(Boolean)) {
       assert.equal(link.children[0].props.underline, true)
@@ -1073,8 +1077,8 @@ test('Tasks compact presentation folds raw/request, omits empty stderr, and reus
   assert.ok(!textsOf(tree).includes('stderr'))
   assert.ok(!textsOf(tree).includes('instance'))
   const metrics=flatten(tree).find(n=>n.props?.key==='task-metrics')
-  assert.equal(metrics.props.flexWrap,'wrap')
-  assert.equal(metrics.children.length,4)
+  assert.equal(metrics.props.flexDirection,'column')
+  assert.equal(metrics.children.length,2)
   await buttonsOf(tree).find(b=>b.props.key==='task-raw').onPress()
   tree=await draw()
   assert.equal(flatten(tree).filter(n=>n.type==='Code').length,2)
@@ -1140,7 +1144,20 @@ test(".mcp.json: contree over uvx; the provider's key reaches only an env value;
   assert.equal(server.env.NEBIUS_API_KEY, '${provider_key.token-factory}')
   assert.equal(server.env.NEBIUS_AI_PROJECT, '${user_config.project_id}')
   const text = JSON.stringify(mcp)
-  for (const [, key] of text.matchAll(/\$\{user_config\.(\w+)\}/g)) assert.ok(manifest.userConfig[key], key)
+  const fields = { ...manifest.userConfig, ...manifest.providers['token-factory'].settings }
+  for (const [, key] of text.matchAll(/\$\{user_config\.(\w+)\}/g)) assert.ok(fields[key], key)
+  assert.equal(manifest.userConfig.project_id, undefined)
+  assert.deepEqual(Object.keys(manifest.userConfig).sort(), ['auto_approve_remote', 'default_image', 'max_run_seconds'])
+  assert.equal(fields.project_id.type, 'string')
+  assert.deepEqual(mcp.mcpServers.tavily, {
+    type: 'http',
+    url: 'https://mcp.tavily.com/mcp/',
+    headers: { Authorization: 'Bearer ${provider_secret.token-factory.tavily_api_key}' },
+  })
+  assert.ok(manifest.providers['token-factory'].credentials.secrets.some(secret => secret.name === 'tavily_api_key'))
+  assert.ok(!manifest.providers['token-factory'].credentials.prompts.some(prompt => prompt.key === 'tavily_api_key'))
+  assert.doesNotMatch(JSON.stringify(server), /tavily_api_key/)
+  assert.doesNotMatch(JSON.stringify(mcp.mcpServers.tavily), /provider_key\./)
   for (const [, key] of text.matchAll(/\$\{provider_key\.([\w-]+)\}/g)) assert.ok(manifest.providers[key], key)
   assert.doesNotMatch(JSON.stringify({ command: server.command, args: server.args }), /user_config|provider_key/)
   for (const [name, value] of Object.entries(server.env)) {
@@ -1148,14 +1165,10 @@ test(".mcp.json: contree over uvx; the provider's key reaches only an env value;
   }
 })
 
-test('hooks, skills and agents: present and well-formed', () => {
+test('hooks and agents: present and well-formed; no skills', () => {
   assert.deepEqual(readJson('hooks/hooks.json'), { modules: ['./sandbox.js'] })
-  const skills = readdirSync(join(pluginDir, 'skills'))
-  assert.deepEqual(skills.sort(), ['sandbox-parallel-dev', 'sandbox-parallel-test', 'sandbox-swe-env', 'sandbox-workflow'])
-  for (const skill of skills) {
-    const text = readFileSync(join(pluginDir, 'skills', skill, 'SKILL.md'), 'utf8')
-    assert.match(text, new RegExp(`^---\\nname: ${skill}\\ndescription: .{40,}\\n---\\n`), skill)
-  }
+  // Usage lives in the MCP servers' own instructions and the tool descriptions.
+  assert.ok(!existsSync(join(pluginDir, 'skills')), 'the plugin ships no skills')
   for (const agent of ['sandbox-dev', 'sandbox-tester']) {
     const path = join(pluginDir, 'agents', `${agent}.md`)
     assert.ok(existsSync(path))
@@ -1165,4 +1178,325 @@ test('hooks, skills and agents: present and well-formed', () => {
     assert.ok(tools, `${agent} lists its tools on one line (the agent loader reads one line per key)`)
     assert.ok(!tools.split(', ').some(tool => /^(Write|Edit|Bash|mcp__contree__(rsync|upload|download))$/.test(tool)), `${agent} cannot touch local files`)
   }
+})
+
+// ── persistent sandbox tasks ──
+const savedTasks = store => [...store].filter(([key]) => key.startsWith(HISTORY_PREFIX)).map(([, task]) => task)
+const offline = () => new Error('offline')
+async function press(mod, key) {
+  const tree = await mod.fire('ui.render', { component: 'Pane', requestId: 'sandbox' })
+  const button = buttonsOf(tree).find(button => button.props.key === key)
+  assert.ok(button, key)
+  return button.onPress()
+}
+
+test('persistent tasks restore same/new session offline and history selection never fetches cached detail', async () => {
+  const store = new Map([['global-lane/auth', laneTable().auth], ['tavily-history/example', { result: 'untouched' }]])
+  const mod = loadMod({ store, server: offline })
+  await mod.fire('session.start', {})
+  await mod.fire('tool.call', { tool: 'mcp__contree__run', image: 'img', command: 'echo hello' }, async () => ({ result: { uuid: 'persist-op', status: 'SUCCESS', exit_code: 0, stdout: 'hello' } }))
+  assert.equal(savedTasks(store).length, 1)
+  for (const session of ['session-1', 'different-session']) {
+    const restored = loadMod({ store, server: offline })
+    restored.$.session.id = async () => session
+    await restored.fire('session.start', {})
+    await restored.settle()
+    const view = restored.record.state.get('view')
+    assert.equal(view.latestTask.value.stdout, 'hello')
+    assert.equal(view.latestTask.args.command, 'echo hello')
+    assert.equal(view.ops.length, 1)
+    await press(restored, 'more-tasks')
+    const before = restored.calls.length
+    await press(restored, 'operation:persist-op')
+    assert.equal(restored.calls.length, before)
+    assert.equal(restored.record.state.get('view').operationDetail.value.stdout, 'hello')
+    await press(restored, 'refresh')
+    assert.ok(restored.calls.some(call => call.tool === 'get_operation'), 'explicit refresh may fetch')
+  }
+  assert.deepEqual(store.get('global-lane/auth'), laneTable().auth)
+  assert.deepEqual(store.get('tavily-history/example'), { result: 'untouched' })
+})
+
+test('persistent tasks retain completed, thrown, denied and MCP-error calls without leaking credentials', async () => {
+  const mod = loadMod({ server: offline })
+  await mod.fire('session.start', {})
+  const secret = 'never-store-this-credential'
+  const error = new Error(`api_key="${secret}" request failed`)
+  await assert.rejects(mod.fire('tool.call', { tool: 'mcp__contree__run', image: 'img', api_key: secret }, async () => { throw error }), caught => caught === error)
+  const denied = await mod.fire('tool.call', { tool: 'mcp__contree__run', image: 'img', env: { API_KEY: secret } })
+  assert.match(denied.deny, /refused/)
+  const answer = { result: { isError: true, content: [{ type: 'text', text: `Authorization: Bearer ${secret}` }] } }
+  assert.equal(await mod.fire('tool.call', { tool: 'mcp__contree__list_images' }, async () => answer), answer)
+  const verdict = { decision: 'deny', reason: `password='${secret}'` }
+  assert.equal(await mod.fire('tool.check', { tool: 'mcp__contree__run', input: { apiKey: secret } }, async () => verdict), verdict)
+  await mod.fire('tool.call', { tool: 'mcp__contree__run', image: 'img' }, async () => ({ result: { uuid: 'bad-exit', exit_code: 7, stdout: 'command failed' } }))
+  assert.equal(savedTasks(mod.store).length, 5)
+  assert.ok(savedTasks(mod.store).every(task => task.failed))
+  assert.ok(savedTasks(mod.store).some(task => task.error?.includes('request failed')))
+  assert.ok(!JSON.stringify([...mod.store]).includes(secret))
+  const restored = loadMod({ store: mod.store, server: offline })
+  await restored.fire('session.start', {})
+  assert.equal(restored.record.state.get('view').ops.length, 5)
+  assert.equal(restored.record.state.get('view').latestTask.value.exit_code, 7)
+})
+
+test('async text and structured starts update the same stored record, including older tasks and explicit waits', async () => {
+  let complete = false
+  const mod = loadMod({ server: (tool, args) => {
+    if (tool === 'get_operation') return { uuid: args.operation_id, status: complete ? 'SUCCESS' : 'EXECUTING', ...(complete ? { exit_code: 0, stdout: 'finished' } : {}) }
+    return { operations: [] }
+  } })
+  await mod.fire('session.start', {})
+  const id = '7d444840-9dc0-11d1-b245-5ffdce74fad2'
+  await mod.fire('tool.call', { tool: 'mcp__contree__run', image: 'img', wait: false }, async () => ({ text: `Operation ${id} started` }))
+  await mod.settle()
+  assert.equal(savedTasks(mod.store).length, 1)
+  assert.equal(savedTasks(mod.store)[0].async, true)
+  const initialId = savedTasks(mod.store)[0].recordId
+  await mod.fire('tool.call', { tool: 'mcp__contree__run', image: 'img', wait: false }, async () => ({ result: { operation_id: 'structured-op', status: 'PENDING' } }))
+  await mod.settle()
+  complete = true
+  await press(mod, 'refresh')
+  assert.equal(savedTasks(mod.store).length, 2, 'background polls are not new tasks')
+  assert.ok(savedTasks(mod.store).every(task => task.async === false && task.value.stdout === 'finished'))
+  assert.ok(savedTasks(mod.store).some(task => task.recordId === initialId))
+  await mod.fire('tool.call', { tool: 'mcp__contree__wait_operations', operation_ids: [id] }, async () => ({ result: { results: { [id]: { status: 'FAILED', exit_code: 9, stderr: 'failed later' } } } }))
+  assert.equal(savedTasks(mod.store).find(task => task.id === id).value.stderr, 'failed later')
+  const restored = loadMod({ store: mod.store, server: offline })
+  await restored.fire('session.start', {})
+  assert.equal(restored.record.state.get('view').ops.length, 3)
+})
+
+test('confirmed clear invalidates another instance in-flight tools and remote replies, preserves lanes/Tavily', async () => {
+  const store = new Map([['global-lane/auth', laneTable().auth], ['tavily/latest', { value: 'keep' }]])
+  let release, releaseRemote
+  const a = loadMod({ store, server: offline })
+  const b = loadMod({ store, server: tool => tool === 'list_operations' ? { operations: [{ uuid: 'old-remote', created_at: '2020-01-01' }] } : tool === 'get_operation' ? new Promise(resolve => { releaseRemote = resolve }) : {} })
+  await a.fire('session.start', {})
+  await b.fire('session.start', {})
+  const pending = a.fire('tool.call', { tool: 'mcp__contree__run', image: 'img' }, () => new Promise(resolve => { release = resolve }))
+  await a.settle()
+  await b.fire('command.run', { command: 'sandbox', args: '' })
+  await b.settle()
+  await press(b, 'more-tasks')
+  const inspecting = press(b, 'operation:old-remote')
+  await b.settle()
+  assert.equal(typeof releaseRemote, 'function')
+  b.$.ui.ask = async (_, choices) => choices[1]
+  await press(b, 'clear-history')
+  assert.equal(savedTasks(store).length, 2)
+  b.$.ui.ask = async (_, choices) => choices[0]
+  await press(b, 'clear-history')
+  releaseRemote({ uuid: 'old-remote', status: 'SUCCESS', stdout: 'old' })
+  release({ result: { uuid: 'old-tool', status: 'SUCCESS', exit_code: 0 } })
+  await pending
+  await inspecting
+  await b.settle()
+  assert.equal(savedTasks(store).length, 0)
+  assert.equal(a.record.state.get('view').latestTask, null)
+  await press(b, 'refresh')
+  assert.deepEqual(b.record.state.get('view').ops, [])
+  assert.equal(b.record.state.get('view').latestTask, null)
+  assert.deepEqual(store.get('global-lane/auth'), laneTable().auth)
+  assert.deepEqual(store.get('tavily/latest'), { value: 'keep' })
+  await a.fire('tool.call', { tool: 'mcp__contree__run', image: 'img' }, async () => ({ result: { uuid: 'new-tool', exit_code: 0 } }))
+  assert.equal(savedTasks(store).length, 1, 'new-generation work is retained')
+})
+
+test('history storage races, count/byte bounds and failure isolation', async () => {
+  const data = new Map([['global-lane/keep', { head: 'keep' }], ['tavily/keep', 'keep']])
+  let release, entered
+  const blocked = new Promise(resolve => { entered = resolve })
+  let block = false
+  const store = {
+    keys: async () => [...data.keys()], get: async key => data.get(key), delete: async key => data.delete(key),
+    set: async (key, value) => { if (block && key.startsWith(HISTORY_PREFIX)) { block = false; entered(); await new Promise(resolve => { release = resolve }) } data.set(key, structuredClone(value)) },
+  }
+  const a = createTaskHistory(store), b = createTaskHistory(store)
+  const old = await a.begin({ startedAt: 1, value: { stdout: 'old' } })
+  block = true
+  const pending = a.save(old)
+  await blocked
+  await b.clear()
+  release()
+  assert.equal(await pending, false)
+  assert.equal((await a.load()).records.length, 0)
+  const huge = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`field${i}`, '中'.repeat(10000)]))
+  const tasks = await Promise.all(Array.from({ length: 85 }, (_, i) => (i % 2 ? a : b).begin({ startedAt: Date.now() + i, method: 'run', args: huge, value: huge, error: '中'.repeat(20000) })))
+  await Promise.all(tasks.map((task, i) => (i % 2 ? a : b).save(task)))
+  assert.equal(savedTasks(data).length, 50)
+  assert.ok(savedTasks(data).every(task => Buffer.byteLength(JSON.stringify(task)) <= HISTORY_RECORD_BYTES))
+  assert.ok(Buffer.byteLength(JSON.stringify(savedTasks(data))) < 1024 * 1024)
+  assert.equal(data.get('tavily/keep'), 'keep')
+  assert.deepEqual(data.get('global-lane/keep'), { head: 'keep' })
+  const mod = loadMod({ server: offline })
+  mod.$.store.set = async key => { if (key.startsWith(HISTORY_PREFIX)) throw new Error('quota full') }
+  await mod.fire('session.start', {})
+  const result = { result: { exit_code: 0 } }
+  assert.equal(await mod.fire('tool.call', { tool: 'mcp__contree__run', image: 'img' }, async () => result), result)
+  const error = new Error('original error')
+  await assert.rejects(mod.fire('tool.call', { tool: 'mcp__contree__run', image: 'img' }, async () => { throw error }), caught => caught === error)
+})
+
+test('history scrubs credential keys, quoted errors, commands, URL userinfo/query and repeated secret values', () => {
+  const secret = 'sensitive-value-12345'
+  const raw = { api_key: secret, apiKey: secret, nested: { 'X-API-Key': secret, access_key: secret }, env: { KEY: secret }, stdout: `echo ${secret}`, error: `{"api_key":"${secret}"} --password '${secret}' Authorization: Bearer ${secret}`, url: `https://user:${secret}@example.com/path?signature=${secret}#${secret}`, safe: 'tag:python:3.12 lane:work /app https://example.com/path' }
+  const cleaned = historyDetail(raw)
+  assert.ok(!JSON.stringify(cleaned).includes(secret))
+  assert.equal(cleaned.api_key, '[redacted]')
+  assert.equal(cleaned.nested['X-API-Key'], '[redacted]')
+  assert.equal(cleaned.safe, raw.safe, 'non-HTTP image identifiers and safe URLs remain usable')
+  assert.ok(!JSON.stringify(historyDetail({ error: 'api_key="standalone-secret" --token standalone-token' })).includes('standalone-secret'))
+})
+
+// Critical-review regressions (append-only: preserve parallel UI/test edits).
+function reviewStore(data = new Map()) {
+  return { data, keys: async () => [...data.keys()], get: async key => data.get(key), set: async (key, value) => { data.set(key, structuredClone(value)) }, delete: async key => data.delete(key) }
+}
+
+test('review: all listed summaries restore offline; inspection upgrades without losing existing details', async () => {
+  const operations = [1, 2, 3].map(n => ({ uuid: `listed-${n}`, kind: 'instance', status: 'SUCCESS', created_at: new Date(NOW + n * 1000).toISOString() }))
+  const mod = loadMod({ server: (tool, args) => tool === 'list_operations' ? { operations } : tool === 'get_operation' ? { ...operations.find(op => op.uuid === args.operation_id), exit_code: 0, stdout: `detail-${args.operation_id}` } : {} })
+  await mod.fire('session.start', {})
+  await press(mod, 'refresh')
+  assert.equal(savedTasks(mod.store).length, 3)
+  assert.equal(savedTasks(mod.store).filter(task => task.summary).length, 2)
+  await press(mod, 'more-tasks')
+  await press(mod, 'operation:listed-1')
+  await press(mod, 'refresh')
+  assert.equal(savedTasks(mod.store).find(task => task.id === 'listed-1').value.stdout, 'detail-listed-1')
+  const restored = loadMod({ store: mod.store, server: offline })
+  await restored.fire('session.start', {})
+  await restored.settle()
+  assert.equal(restored.record.state.get('view').ops.length, 3)
+  await press(restored, 'more-tasks')
+  await press(restored, 'operation:listed-2')
+  assert.equal(restored.record.state.get('view').operationDetail.summary, true)
+  assert.equal(restored.record.state.get('view').operationDetail.value.status, 'SUCCESS')
+  const before = restored.calls.length
+  await press(restored, 'operation:listed-1')
+  assert.equal(restored.calls.length, before)
+})
+
+test('review: ordinary env values cannot corrupt metadata or cause rejected persistence', async () => {
+  const store = new Map([['sandbox-history-generation', { generation: 'generation-123', before: 1 }]])
+  const mod = loadMod({ store, server: offline })
+  await mod.fire('session.start', {})
+  await mod.fire('tool.call', { tool: 'mcp__contree__run', image: 'img', env: { CI: '1', MODE: 'test' } }, async () => ({ result: { uuid: 'operation-123', exit_code: 0, stdout: 'test 123' } }))
+  const task = savedTasks(store)[0]
+  assert.equal(task.generation, 'generation-123')
+  assert.equal(task.id, 'operation-123')
+  assert.equal(task.value.stdout, 'test 123')
+  assert.equal(task.args.env, '[redacted]')
+  assert.equal(task.pending, false)
+  assert.equal(savedTasks(store).length, 1)
+  const history = createTaskHistory(reviewStore())
+  const secretTask = await history.begin({ startedAt: 1, args: { api_key: '1' }, value: { stdout: '1' }, pending: true })
+  assert.ok(!secretTask.recordId.includes('[redacted]'))
+  assert.equal(secretTask.value.stdout, '[redacted]')
+  assert.equal(await history.save(secretTask), true)
+})
+
+test('review: delayed concurrent clear cannot regress watermark and observed tombstones compact safely', async () => {
+  const { HISTORY_CLEAR_PREFIX } = await import('../hooks/sandbox/history.js')
+  const store = reviewStore()
+  const baseSet = store.set
+  let release, entered
+  const waiting = new Promise(resolve => { entered = resolve })
+  let block = true
+  store.set = async (key, value) => {
+    if (block && key.startsWith(HISTORY_CLEAR_PREFIX)) { block = false; entered(); await new Promise(resolve => { release = resolve }) }
+    await baseSet(key, value)
+  }
+  const a = createTaskHistory(store), b = createTaskHistory(store)
+  const old = await a.begin({ startedAt: 1 })
+  const delayed = a.clear()
+  await waiting
+  // Simulate a later clear arriving from another runtime while the first write stalls.
+  await baseSet(HISTORY_CLEAR_PREFIX + 'later-marker', { generation: 'later-marker', before: Date.now() + 100000 })
+  const later = await b.clear()
+  release()
+  await delayed
+  const restored = await createTaskHistory(store).load()
+  assert.equal(restored.before, later.before)
+  assert.equal(restored.generation, later.generation)
+  assert.equal(await a.save(old), false)
+  for (let n = 0; n < 10; n++) await b.clear()
+  assert.equal([...store.data.keys()].filter(key => key.startsWith(HISTORY_CLEAR_PREFIX)).length, 1)
+})
+
+test('review: clear while operation loading is published cannot seed a new-generation old detail', async () => {
+  const store = new Map()
+  const op = { uuid: 'publish-race', kind: 'instance', status: 'SUCCESS', created_at: new Date(NOW).toISOString() }
+  const mod = loadMod({ store, server: tool => tool === 'list_operations' ? { operations: [op] } : tool === 'get_operation' ? { ...op, stdout: 'old' } : {} })
+  await mod.fire('session.start', {})
+  await mod.fire('tool.call', { tool: 'mcp__contree__get_image', image: 'img' }, async () => ({ result: { uuid: 'img' } }))
+  await press(mod, 'refresh')
+  await press(mod, 'more-tasks')
+  const other = createTaskHistory(mod.$.store)
+  const set = mod.$.state.set
+  let cleared = false
+  mod.$.state.set = async (ref, value) => {
+    if (!cleared && value.operationDetail?.loading) { cleared = true; await other.clear() }
+    return set(ref, value)
+  }
+  await press(mod, 'operation:publish-race')
+  assert.equal(cleared, true)
+  assert.equal(savedTasks(store).length, 0)
+  await press(mod, 'refresh')
+  assert.deepEqual(mod.record.state.get('view').ops, [])
+})
+
+test('review: restored pending calls are unknown while the actual owner remains live', async () => {
+  const mod = loadMod({ server: offline })
+  await mod.fire('session.start', {})
+  let release
+  const pending = mod.fire('tool.call', { tool: 'mcp__contree__run', image: 'img' }, () => new Promise(resolve => { release = resolve }))
+  await mod.settle()
+  assert.equal(mod.record.state.get('view').latestTask.pending, true)
+  const restored = loadMod({ store: mod.store, server: offline })
+  await restored.fire('session.start', {})
+  assert.equal(restored.record.state.get('view').latestTask.pending, false)
+  assert.equal(restored.record.state.get('view').latestTask.interrupted, true)
+  assert.equal(restored.record.state.get('view').ops[0].state, 'UNKNOWN')
+  assert.equal(savedTasks(mod.store)[0].pending, true, 'presentation must not mutate the live owner record')
+  await press(mod, 'refresh')
+  assert.equal(mod.record.state.get('view').latestTask.pending, true)
+  release({ result: { uuid: 'completed-owner', exit_code: 0 } })
+  await pending
+  await press(restored, 'refresh')
+  assert.equal(restored.record.state.get('view').latestTask.interrupted, undefined)
+  assert.equal(restored.record.state.get('view').latestTask.value.exit_code, 0)
+})
+
+test('review: active result status overrides false flags in terminal snapshot protection', async () => {
+  const store = reviewStore()
+  const history = createTaskHistory(store)
+  const task = await history.begin({ startedAt: 1, pending: false, async: false, value: { status: 'EXECUTING' } })
+  await history.save(task)
+  await history.save({ ...task, async: true, value: { status: 'EXECUTING', stdout: 'progress' } })
+  assert.equal((await history.load()).records[0].value.stdout, 'progress')
+  await history.save({ ...task, value: { status: 'SUCCESS', stdout: 'done' } })
+  await history.save({ ...task, async: true, value: { status: 'EXECUTING', stdout: 'stale' } })
+  assert.equal((await history.load()).records[0].value.stdout, 'done')
+})
+
+test('review: explicit terminal statuses remain terminal even with stale async flags', async () => {
+  const history = createTaskHistory(reviewStore())
+  const task = await history.begin({ startedAt: 1, async: true, value: { status: 'SUCCESS', stdout: 'done' } })
+  await history.save(task)
+  await history.save({ ...task, value: { status: 'EXECUTING', stdout: 'stale' } })
+  assert.equal((await history.load()).records[0].value.stdout, 'done')
+})
+
+test('review: sequential clears always advance generation and watermark', async () => {
+  const history = createTaskHistory(reviewStore())
+  const first = await history.clear()
+  const task = await history.begin({ startedAt: Date.now(), value: { stdout: 'between clears' } })
+  await history.save(task)
+  const second = await history.clear()
+  assert.notEqual(second.generation, first.generation)
+  assert.ok(second.before > first.before)
+  assert.equal(await history.save(task), false)
+  assert.equal((await history.load()).records.length, 0)
 })

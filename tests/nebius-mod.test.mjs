@@ -98,6 +98,7 @@ test('manifest: every text is given in the same seven languages', () => {
     } else if (Array.isArray(value)) value.forEach((inner, i) => walk(inner, `${path}[${i}]`))
   }
   walk(provider.credentials, 'credentials')
+  walk(provider.settings, 'settings')
   walk(provider.modelsUi, 'modelsUi')
   assert.ok(texts.length > 0)
   for (const [path, text] of texts) assert.deepEqual(Object.keys(text).sort(), [...languages].sort(), path)
