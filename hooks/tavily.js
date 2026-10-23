@@ -127,6 +127,7 @@ export function registerTavily(on, { setup } = {}) {
         view = { ...view, error: safeText(error instanceof Error ? error.message : String(error)) || t('tavily.failed') }
       } finally {
         if (view.error) await checkKey(root)
+        else view = { ...view, missingKey: false }
         view = { ...view, submitting: false }
         await quietly(() => publish(root))
       }

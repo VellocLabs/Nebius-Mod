@@ -411,7 +411,7 @@ test('query precedes results and history labels shrink with pane width', () => {
   assert.equal(view.rows[0].query, query)
 })
 
-test('a missing Tavily key is named in the panel on /tavily and after a failed search; a saved one is not', async () => {
+test('a missing Tavily key is named in the panel on /tavily and after a failed search, and a successful search clears it', async () => {
   let saved = false
   const h = harness(sharedStore(), { setup: async () => saved })
   await h.start()
@@ -430,4 +430,9 @@ test('a missing Tavily key is named in the panel on /tavily and after a failed s
   await input.onInput('news')
   await search.onPress()
   assert.ok(notice(await h.render()))
+  // The key saved since: the next search succeeds and the line goes.
+  saved = true
+  h.core(async () => ({ result: { structuredContent: { code: 'ok', message: 'No matches', results: [] } } }))
+  await find(await h.render(), 'tavily-query').onSubmit('news again')
+  assert.ok(!notice(await h.render()), 'a successful search clears the missing-key line')
 })
