@@ -85,6 +85,10 @@ test('manifest: one openai-chat provider on the Token Factory host, with the ico
   assert.ok(provider.domains.some(domain => new URL(DEFAULT_BASE_URL).hostname.endsWith(`.${domain}`)))
   assert.ok(provider.modelsUi.starterModels.length > 0 && provider.modelsUi.starterModels.length <= 8)
   for (const id of provider.modelsUi.starterModels) assert.match(id, /^[^/]+\/[^/]+$/)
+  assert.deepEqual(Object.keys(provider.modelsUi.tierModels).sort(), ['balanced', 'best', 'fast'])
+  for (const id of Object.values(provider.modelsUi.tierModels)) {
+    assert.ok(provider.modelsUi.starterModels.includes(id), `tier model ${id} is a starter model`)
+  }
   for (const tag of provider.modelsUi.filters) assert.ok(provider.modelsUi.tags[tag], `filter ${tag} has a label`)
 })
 

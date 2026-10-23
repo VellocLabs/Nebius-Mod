@@ -177,11 +177,16 @@
           }
         },
         "starterModels": [
-          "zai-org/GLM-5.3",
-          "deepseek-ai/DeepSeek-V4-Pro",
-          "moonshotai/Kimi-K3",
-          "zai-org/GLM-5.3-Flash"
-        ]
+          "nvidia/Nemotron-3-Ultra-550b-a55b",
+          "nvidia/Nemotron-3.5-Super-VL",
+          "nvidia/Nemotron-3_5-Lightning",
+          "deepseek-ai/DeepSeek-V4.1-Flash"
+        ],
+        "tierModels": {
+          "best": "nvidia/Nemotron-3-Ultra-550b-a55b",
+          "balanced": "nvidia/Nemotron-3.5-Super-VL",
+          "fast": "nvidia/Nemotron-3_5-Lightning"
+        }
       },
       "module": "./providers/nebius.js",
       "settings": {
