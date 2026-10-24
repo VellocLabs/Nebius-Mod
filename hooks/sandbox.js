@@ -32,6 +32,7 @@ import {
   releaseOwner,
   resolveImage,
   secretLikeEnvNames,
+  withRunEnv,
 } from './sandbox/lanes.js'
 import { isActive, missingPermissions, operationIdOf, replyOf, resultImageOf } from './sandbox/replies.js'
 import { MATRIX_SCHEMA, planMatrix, summarize } from './sandbox/matrix.js'
@@ -301,7 +302,7 @@ export function register(on, options = {}) {
   const viewRef = $ => ({ plugin: $.plugin.name, key: 'view' })
 
   async function callContree($, tool, args) {
-    const result = await $.mcp.call(CONTREE_SERVER, tool, args)
+    const result = await $.mcp.call(CONTREE_SERVER, tool, withRunEnv(tool, args))
     const text = textOf(result)
     if (result?.isError) throw new Error(text || `${tool} failed`)
     return replyOf({ structured: result?.structuredContent, text })

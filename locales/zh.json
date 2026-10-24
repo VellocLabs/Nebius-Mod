@@ -205,6 +205,7 @@
   "setup.uv.missing": "未安装。Windows 上用 `winget install --id astral-sh.uv -e --source winget` 安装，macOS 和 Linux 上用 `curl -LsSf https://astral.sh/uv/install.sh | sh`，然后再检查一次：会重新连接沙箱服务。",
   "setup.uv.offPath": "已安装，但暂时还找不到。请在 /sandbox 中点击重新连接，或再检查一次；如果仍然找不到，请完全退出 Velloc（包括托盘图标）后重新打开。",
   "setup.uv.unknown": "无法在此检查。",
+  "setup.uv.viaServer": "可用：沙箱服务已用它启动",
   "setup.key.label": "Nebius API 密钥",
   "setup.key.ok": "已保存",
   "setup.key.viaFile": "未在 Velloc 中保存；沙箱服务读取 ~/.config/contree/auth.ini",

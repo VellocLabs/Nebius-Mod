@@ -204,6 +204,7 @@
   "setup.uv.missing": "not installed. Install it with `winget install --id astral-sh.uv -e --source winget` on Windows, or `curl -LsSf https://astral.sh/uv/install.sh | sh` on macOS and Linux, then check again: that reconnects the sandbox server.",
   "setup.uv.offPath": "installed, but not found yet. Press Reconnect in /sandbox or check again; if it is still not found, fully quit Velloc, tray icon included, and reopen it.",
   "setup.uv.unknown": "could not be checked here.",
+  "setup.uv.viaServer": "works: the sandbox server started with it",
   "setup.key.label": "Nebius API key",
   "setup.key.ok": "saved",
   "setup.key.viaFile": "not saved in Velloc; the sandbox server reads ~/.config/contree/auth.ini",

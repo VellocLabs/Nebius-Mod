@@ -237,7 +237,18 @@ The unit tests are `tests/nebius-mod.test.mjs` (the provider) and
 `tests/nebius-sandbox.test.mjs` (the sandbox part) at the repository root
 (`npm test`).
 
+`npm run smoke` (`tests/smoke/contree-smoke.mjs`) runs against a real Sandbox
+through `uvx contree-mcp`, and skips unless `NEBIUS_API_KEY` and
+`NEBIUS_AI_PROJECT` are set: a local folder whose path has spaces synced with
+`rsync` and tested from its `directory_state_id`, `run` with `env` omitted,
+null and `{}` as the plugin sends it, a saving run whose result image keeps a
+file, and a disposable run that leaves nothing behind. Run it before a release.
+
 ## Releasing
+
+Raise `version` in `.claude-plugin/plugin.json` with every change that should
+reach users: Velloc offers an update only when the version is newer than the
+installed one, so a new commit under the same version is never installed over it.
 
 This repository is the plugin: Velloc's built-in marketplace pins it to a
 commit and ships its

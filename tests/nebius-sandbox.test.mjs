@@ -20,6 +20,7 @@ import {
   resolveImage,
   resultImageOf,
   secretLikeEnvNames,
+  withRunEnv,
 } from '../hooks/sandbox/lanes.js'
 import { MAX_SHARDS, operationIdOf, outcomeOf, planMatrix, summarize } from '../hooks/sandbox/matrix.js'
 import { patchCommand, shellQuote } from '../hooks/sandbox/patch.js'
@@ -59,13 +60,25 @@ test('resolveImage: a lane is its head, empty is the default image, anything els
 test('guardCall: run on a lane becomes its head; the default image fills an empty one', () => {
   const lanes = laneTable()
   assert.deepEqual(guardCall('run', { command: 'ls', image: 'lane:auth' }, { lanes, defaultImage: '' }), {
-    args: { command: 'ls', image: 'img-0' },
+    args: { command: 'ls', image: 'img-0', env: {} },
     lane: 'auth',
   })
-  assert.deepEqual(guardCall('run', { command: 'ls' }, { lanes, defaultImage: 'tag:py' }), { args: { command: 'ls', image: 'tag:py' } })
+  assert.deepEqual(guardCall('run', { command: 'ls' }, { lanes, defaultImage: 'tag:py' }), { args: { command: 'ls', image: 'tag:py', env: {} } })
   assert.deepEqual(guardCall('read_file', { image: 'lane:auth', path: '/a' }, { lanes }), { args: { image: 'img-0', path: '/a' }, lane: 'auth' })
   assert.deepEqual(guardCall('set_tag', { image_uuid: 'lane:auth', tag: 'x' }, { lanes }), { args: { image_uuid: 'img-0', tag: 'x' } })
   assert.deepEqual(guardCall('list_images', { tag_prefix: 'py' }, { lanes }), { args: { tag_prefix: 'py' } })
+})
+
+test('run env: omitted, null or not an object becomes {}; a given object is kept, other tools are untouched', () => {
+  const lanes = laneTable()
+  for (const env of [undefined, null, 'A=1', ['A=1'], 0]) {
+    const args = env === undefined ? { command: 'ls', image: 'i' } : { command: 'ls', image: 'i', env }
+    assert.deepEqual(guardCall('run', args, { lanes }).args.env, {}, String(env))
+    assert.deepEqual(withRunEnv('run', args).env, {}, String(env))
+  }
+  const kept = { CI: '1', UNSET_ME: null }
+  assert.equal(guardCall('run', { command: 'ls', image: 'i', env: kept }, { lanes }).args.env, kept)
+  assert.deepEqual(withRunEnv('read_file', { image: 'i', path: '/a' }), { image: 'i', path: '/a' })
 })
 
 test('guardCall: credentials in env are refused, a long timeout is cut', () => {
@@ -540,7 +553,7 @@ test('mod: the test matrix starts every shard, waits for them and answers one su
   })
   const runs = mod.calls.filter(call => call.tool === 'run')
   assert.equal(runs.length, 3)
-  assert.deepEqual(runs[0].args, { command: 'pytest a', image: 'img', disposable: true, wait: false, timeout: 600 })
+  assert.deepEqual(runs[0].args, { command: 'pytest a', image: 'img', disposable: true, wait: false, timeout: 600, env: {} })
   const wait = mod.calls.find(call => call.tool === 'wait_operations')
   assert.deepEqual(wait.args, { operation_ids: [1, 2, 3].map(i => `00000000-0000-4000-8000-00000000000${i}`), mode: 'all', timeout: 240 })
   assert.match(answer.result, /^Test matrix on img: 2\/3 passed/)
@@ -559,6 +572,7 @@ test('mod: a lane\'s patch is answered inline, or written to the file asked for'
   const run = mod.calls.findLast(call => call.tool === 'run')
   assert.equal(run.args.image, 'img-0')
   assert.equal(run.args.disposable, true)
+  assert.deepEqual(run.args.env, {}, 'the service refuses a run without an env dictionary')
   const written = await mod.fire('tool.call', { tool: 'mcp__nebius__sandbox_lane_patch', tool_use_id: 't', name: 'ui', path: '/app', out: '.sandbox/ui.patch' })
   assert.match(written.result, /Wrote the patch of lane ui \(1 files, \d+ bytes\) to \.sandbox\/ui\.patch/)
   assert.deepEqual(mod.record.written, { path: '.sandbox/ui.patch', text: patch })
@@ -1560,10 +1574,46 @@ test('setup: auth.ini stands in for the key and project; access problems and a r
   const noAccess = setupChecks({ uv: { state: 'ok' }, key: true, project: true }, { mcp: { isConnected: true, missing: ['spawn_disposable'] }, defaultImage: 'x', parts: ['sandbox'] })
   assert.equal(firstBlocker(noAccess).id, 'access')
   assert.match(setupReport(noAccess, tEn), /missing: spawn_disposable/)
-  const offPath = setupChecks({ uv: { state: 'offPath' }, key: true, project: true }, { mcp: { isConnected: true }, defaultImage: 'x', parts: ['sandbox'] })
+  const offPath = setupChecks({ uv: { state: 'offPath' }, key: true, project: true }, { mcp: { isConnected: false, reason: 'failed' }, defaultImage: 'x', parts: ['sandbox'] })
   assert.match(setupReport(offPath, tEn), /Reconnect in \/sandbox[\s\S]*fully quit Velloc[\s\S]*the user does this/)
   const noImage = setupChecks({ uv: { state: 'ok' }, key: true, project: true }, { mcp: { isConnected: true }, defaultImage: '', parts: ['sandbox'] })
   assert.equal(firstBlocker(noImage), null, 'a missing default image only means naming one per call')
+})
+
+test('setup: a connected server proves uv works, whatever the probe saw', () => {
+  for (const state of ['missing', 'offPath', 'unknown']) {
+    const checks = setupChecks({ uv: { state }, key: true, project: true }, { mcp: { isConnected: true }, defaultImage: 'tag:python:3.12', parts: ['sandbox'] })
+    assert.deepEqual(checks.find(check => check.id === 'uv'), { id: 'uv', state: 'ok', by: 'agent', vars: { via: 'server' } }, state)
+    assert.equal(firstBlocker(checks), null, state)
+    const report = setupReport(checks, tEn)
+    assert.match(report, /^✓ uv \(starts the sandbox server\): works: the sandbox server started with it$/m, state)
+    assert.match(report, /Everything is set up/, state)
+    assert.doesNotMatch(report, /You do: uv|not installed/, state)
+  }
+})
+
+test('setup: uv installed by WinGet is found under LOCALAPPDATA when the running shell cannot see it', async () => {
+  const $ = {
+    plugin: { name: 'nebius' },
+    settings: { read: async () => savedSettings() },
+    env: { get: async name => ({ USERPROFILE: 'C:\\Users\\me', LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local\\' })[name] },
+    fs: { exists: async path => path === 'C:/Users/me/AppData/Local/Microsoft/WinGet/Links/uvx.exe' },
+    process: { run: async () => uvMissing() },
+  }
+  assert.deepEqual((await probeSetup($, { parts: ['sandbox'] })).uv, { state: 'offPath' })
+})
+
+test('setup: a probe that could not run is unknown, not a missing uv', async () => {
+  const $ = {
+    plugin: { name: 'nebius' },
+    settings: { read: async () => savedSettings() },
+    env: { get: async name => (name === 'USERPROFILE' ? 'C:\\Users\\me' : undefined) },
+    fs: { exists: async () => false },
+    process: { run: async () => { throw new Error('$.process.run: no shell is available on the host') } },
+  }
+  assert.deepEqual((await probeSetup($, { parts: ['sandbox'] })).uv, { state: 'unknown' })
+  const ranAndFailed = { ...$, process: { run: async () => uvMissing() } }
+  assert.deepEqual((await probeSetup(ranAndFailed, { parts: ['sandbox'] })).uv, { state: 'missing' })
 })
 
 test('setup: probing reads key presence only, finds the project in pluginConfigs and uv off PATH', async () => {

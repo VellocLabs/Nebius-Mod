@@ -9,8 +9,9 @@
 export const PROVIDER_ID = 'mod.nebius.token-factory'
 export const PARTS = Object.freeze(['sandbox', 'search'])
 
-/** Where uv's installers put `uvx` when it is not on PATH. */
-const UV_DIRS = Object.freeze(['.local/bin', '.cargo/bin'])
+/** Where uv's installers put `uvx` when it is not on PATH: under home, and WinGet's links under LOCALAPPDATA. */
+const UV_HOME_DIRS = Object.freeze(['.local/bin', '.cargo/bin'])
+const UV_LOCAL_APP_DATA_DIRS = Object.freeze(['Microsoft/WinGet/Links'])
 const UV_NAMES = Object.freeze(['uvx.exe', 'uvx'])
 const UV_TIMEOUT_MS = 15_000
 
@@ -22,31 +23,51 @@ function filled(value) {
   return typeof value === 'string' && value.trim() !== ''
 }
 
+function slashed(path) {
+  return path.replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
 async function homeOf($) {
   for (const name of ['USERPROFILE', 'HOME']) {
     const value = await quietly(() => $.env.get(name))
-    if (filled(value)) return value.replace(/\\/g, '/').replace(/\/+$/, '')
+    if (filled(value)) return slashed(value)
   }
   return null
+}
+
+async function uvDirsOf($, home) {
+  const dirs = home ? UV_HOME_DIRS.map(dir => `${home}/${dir}`) : []
+  const localAppData = await quietly(() => $.env.get('LOCALAPPDATA'))
+  if (filled(localAppData)) dirs.push(...UV_LOCAL_APP_DATA_DIRS.map(dir => `${slashed(localAppData)}/${dir}`))
+  return dirs
 }
 
 async function exists($, path) {
   return (await quietly(() => $.fs.exists(path), false)) === true
 }
 
-/** `uvx` on PATH: `ok` with its version, `offPath` when installed where PATH does not reach, else `missing`. */
+/**
+ * `uvx` as this computer has it: `ok` with its version when it runs,
+ * `offPath` when installed where the running shell's PATH does not reach, else
+ * `missing`, or `unknown` when the run itself could not be made.
+ */
 async function probeUv($, home) {
-  if (typeof $.process?.run !== 'function') return { state: 'unknown' }
-  const ran = await quietly(() => $.process.run(['uvx', '--version'], { timeoutMs: UV_TIMEOUT_MS }))
-  if (ran && ran.exitCode === 0) return { state: 'ok', version: String(ran.stdout ?? '').trim().split(/\r?\n/)[0] }
-  if (home) {
-    for (const dir of UV_DIRS) {
-      for (const name of UV_NAMES) {
-        if (await exists($, `${home}/${dir}/${name}`)) return { state: 'offPath' }
-      }
+  let ran = null
+  let runFailed = typeof $.process?.run !== 'function'
+  if (!runFailed) {
+    try {
+      ran = await $.process.run(['uvx', '--version'], { timeoutMs: UV_TIMEOUT_MS })
+    } catch {
+      runFailed = true
     }
   }
-  return { state: 'missing' }
+  if (ran && ran.exitCode === 0) return { state: 'ok', version: String(ran.stdout ?? '').trim().split(/\r?\n/)[0] }
+  for (const dir of await uvDirsOf($, home)) {
+    for (const name of UV_NAMES) {
+      if (await exists($, `${dir}/${name}`)) return { state: 'offPath' }
+    }
+  }
+  return { state: runFailed ? 'unknown' : 'missing' }
 }
 
 /** This plugin's stored options in settings.json, by its config id (`<name>` or `<name>@<source>`). */
@@ -86,7 +107,8 @@ export async function probeSetup($, { parts = PARTS } = {}) {
  * One row per requirement of `parts`, in the order they must be met:
  * `{ id, state: 'ok' | 'missing' | 'failed' | 'unknown' | 'waiting', by: 'user' | 'agent', vars? }`.
  * The server row is `waiting` while uv, the key or the Project ID is unmet: its
- * failure is their consequence, not a step of its own.
+ * failure is their consequence, not a step of its own. A connected server
+ * started through uvx, so it settles the uv row whatever the probe saw.
  * `mcp` is the contree connection as the pane holds it; `defaultImage` the option.
  */
 export function setupChecks(facts, { mcp = null, defaultImage = '', parts = PARTS } = {}) {
@@ -94,7 +116,8 @@ export function setupChecks(facts, { mcp = null, defaultImage = '', parts = PART
   const add = (id, state, by, vars) => checks.push({ id, state, by, ...(vars ? { vars } : {}) })
   if (parts.includes('sandbox')) {
     const uv = facts.uv?.state ?? 'unknown'
-    add('uv', uv === 'ok' ? 'ok' : uv === 'offPath' ? 'failed' : uv, uv === 'offPath' ? 'user' : 'agent', uv === 'ok' ? { version: facts.uv.version } : undefined)
+    if (uv !== 'ok' && mcp?.isConnected) add('uv', 'ok', 'agent', { via: 'server' })
+    else add('uv', uv === 'ok' ? 'ok' : uv === 'offPath' ? 'failed' : uv, uv === 'offPath' ? 'user' : 'agent', uv === 'ok' ? { version: facts.uv.version } : undefined)
     const credential = (value, id) => add(id, value === true ? 'ok' : facts.authFile ? 'ok' : value === false ? 'missing' : 'unknown', 'user', value !== true && facts.authFile ? { via: 'auth.ini' } : undefined)
     credential(facts.key, 'key')
     credential(facts.project, 'project')
@@ -126,9 +149,10 @@ export function firstBlocker(checks) {
   return checks.find(blocks) ?? null
 }
 
-/** The text key a row reads as: `setup.<id>.<state>`, or `.offPath` for uv installed off PATH. */
+/** The text key a row reads as: `setup.<id>.<state>`, `.offPath` for uv installed off PATH, `.viaServer` / `.viaFile` for a row met another way. */
 export function checkTextKey(check) {
   if (check.id === 'uv' && check.state === 'failed') return 'setup.uv.offPath'
+  if (check.state === 'ok' && check.vars?.via === 'server') return `setup.${check.id}.viaServer`
   if (check.state === 'ok' && check.vars?.via) return `setup.${check.id}.viaFile`
   return `setup.${check.id}.${check.state}`
 }

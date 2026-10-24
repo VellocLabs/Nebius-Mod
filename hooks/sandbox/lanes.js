@@ -80,6 +80,18 @@ export function secretLikeEnvNames(env) {
 }
 
 /**
+ * `run` arguments with `env` as an object: a missing, null or non-object `env`
+ * becomes `{}`, since the contree service answers HTTP 400 for anything but a
+ * dictionary. Other tools' arguments are returned as they are.
+ */
+export function withRunEnv(tool, args) {
+  if (tool !== 'run') return args
+  const env = args?.env
+  if (env && typeof env === 'object' && !Array.isArray(env)) return args
+  return { ...args, env: {} }
+}
+
+/**
  * The guard and rewrite for one contree call.
  *
  * Returns `{ args, lane?, saves? }` to run with, or `{ deny }`:
@@ -105,6 +117,7 @@ export function guardCall(tool, args, { lanes, agentId, defaultImage, maxRunSeco
   }
   if (tool !== 'run') return lane ? { args: next, lane } : { args: next }
 
+  next.env = withRunEnv(tool, next).env
   const secrets = secretLikeEnvNames(next.env)
   if (secrets.length > 0) {
     const named = secrets.length === 1 ? `${secrets[0]} looks like a credential` : `${secrets.join(', ')} look like credentials`

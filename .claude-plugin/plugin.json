@@ -1,6 +1,6 @@
 {
   "name": "nebius",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Nebius models, cloud sandboxes and Tavily web search in Velloc.",
   "author": {
     "name": "Velloc"
