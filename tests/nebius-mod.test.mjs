@@ -118,6 +118,81 @@ test('icon: the colored mark, with a viewBox so it scales, and nothing a page wo
   assert.ok(Buffer.byteLength(svg) < 64 * 1024)
 })
 
+// The frontmatter of a template or welcome file: `key: value` lines between
+// the `---` fences, `#` comment lines dropped, `[a, b]` read as a list.
+function frontmatter(markdown) {
+  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  assert.ok(match, 'the file opens with a frontmatter block')
+  const out = {}
+  for (const line of match[1].split(/\r?\n/)) {
+    if (!line.trim() || line.trim().startsWith('#') || /^\s/.test(line)) continue
+    const [, key, value] = line.match(/^([A-Za-z_-]+):\s*(.*)$/) ?? []
+    if (!key) continue
+    const list = value.match(/^\[(.*)\]$/)
+    out[key] = list ? list[1].split(',').map(entry => entry.trim()).filter(Boolean) : value
+  }
+  return out
+}
+
+const templateDir = join(pluginDir, 'templates', 'safecode')
+const read = (...parts) => readFileSync(join(templateDir, ...parts), 'utf8')
+
+test('manifest: the plugin waits for the Nebius provider and for the template MCP scope feature', () => {
+  assert.ok(manifest.requires.providers.includes('token-factory'))
+  assert.ok(Object.keys(manifest.providers).includes('token-factory'), 'the required provider is one the plugin ships')
+  assert.ok(manifest.requires.features.includes('template-mcp-scope'))
+})
+
+test('manifest: the SafeCode template is declared, titled by its brand word, with its four files present', () => {
+  const template = manifest.templates.safecode
+  assert.deepEqual(template.title, { en: 'SafeCode', 'zh-CN': 'SafeCode' })
+  assert.match(template.description.en, /Nothing you ask for runs on this computer/)
+  assert.ok(template.description['zh-CN'].length > 0)
+  assert.equal(template.icon, './icon.svg')
+  assert.equal(template.launcher, 'both')
+  for (const file of ['template.md', 'welcome.md', 'welcome-zh.md', join('includes', 'nebius_safecode_intro.md'), join('includes', 'nebius_safecode_using_tools.md')]) {
+    assert.ok(read(file).length > 0, `${file} is present`)
+  }
+})
+
+test('template: SafeCode takes MCP from this plugin only, names its skills exactly, and carries no way to run here', () => {
+  const fm = frontmatter(read('template.md'))
+  assert.equal(fm.type, 'nebius:safecode')
+  assert.equal(fm.mcp, 'plugin')
+  assert.equal(fm.fileSnapshots, 'true')
+  assert.deepEqual(fm.skills, ['plugin:nebius:setup'])
+  assert.deepEqual(fm.tools, ['read', 'plan', 'superedit', 'skills', 'ask', 'todo'])
+  for (const group of ['shell', 'exec', 'subagent', 'webfetch', 'edit']) assert.ok(!fm.tools.includes(group), `no ${group} group`)
+  assert.equal(fm.noExecution, undefined, 'mcp: plugin and noExecution exclude each other')
+  const body = read('template.md')
+  for (const holder of ['!nebius_safecode_intro', '!nebius_safecode_using_tools', '!tool_call_parallelism', '!delivering_work', '!autonomy', '$mcp_servers', '$environment', '$memory']) {
+    assert.ok(body.includes(`\n${holder}\n`), `prompt skeleton has ${holder}`)
+  }
+  assert.match(body, /\n## begin\s*$/)
+})
+
+test('template: the intro opens on the local boundary, speaks as the agent name, and closes on the four-part rule', () => {
+  const intro = read('includes', 'nebius_safecode_intro.md')
+  assert.match(intro, /^Nothing runs on this computer\./)
+  assert.match(intro, /\{\{AGENT_NAME\}\}/)
+  assert.match(intro, /Read locally\. Change locally\. Run in the sandbox\. Never run here\.\s*$/)
+  for (const tool of ['mcp__contree__rsync', 'mcp__contree__upload', 'mcp__contree__download', 'mcp__nebius__sandbox_lane_patch']) {
+    assert.ok(intro.includes(tool), `${tool} is named as a tool that touches local files`)
+  }
+})
+
+test('template: the welcome chips come in English and Chinese, six each, and none asks to run anything here', () => {
+  for (const file of ['welcome.md', 'welcome-zh.md']) {
+    const text = read(file)
+    assert.ok(frontmatter(text).greeting.length > 0, `${file} has a greeting`)
+    const chips = text.match(/^\s+- title: /gm) ?? []
+    assert.equal(chips.length, 6, `${file} has six chips`)
+    assert.equal((text.match(/^\s+prompt: /gm) ?? []).length, 6, `${file} gives every chip a prompt`)
+  }
+  const prompts = read('welcome.md').split('\n').filter(line => /^\s+prompt: /.test(line)).join('\n')
+  assert.doesNotMatch(prompts, /run (it|them|the tests|the suite) (here|locally|on this (computer|machine))/i)
+})
+
 test('listing: keeps active text-out models once, drops embeddings, image models and retired rows', () => {
   const rows = buildModels({ listing: LISTING, catalog: CATALOG })
   assert.deepEqual(rows.map(row => row.id), [

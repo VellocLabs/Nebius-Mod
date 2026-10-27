@@ -1152,7 +1152,7 @@ test('manifest: userConfig fields as the plugin format holds them; the mod reads
   assert.ok(manifest.providers['token-factory'], 'the provider whose key the sandboxes use')
   const source = readFileSync(join(pluginDir, 'hooks', 'sandbox.js'), 'utf8')
   for (const key of source.matchAll(/options\.(\w+)/g)) assert.ok(fields[key[1]], `options.${key[1]} is declared`)
-  assert.match(manifest.version, /^1\.2\.\d+$/)
+  assert.match(manifest.version, /^1\.3\.\d+$/)
 })
 
 test(".mcp.json: contree over uvx; the provider's key reaches only an env value; every option and provider it names is declared", () => {

@@ -1,7 +1,7 @@
 {
   "name": "nebius",
-  "version": "1.2.1",
-  "description": "Nebius models, cloud sandboxes and Tavily web search in Velloc.",
+  "version": "1.3.0",
+  "description": "Nebius models, cloud sandboxes, a SafeCode session type and Tavily web search in Velloc.",
   "author": {
     "name": "Velloc"
   },
@@ -13,6 +13,28 @@
     "sandbox",
     "mcp"
   ],
+  "requires": {
+    "providers": [
+      "token-factory"
+    ],
+    "features": [
+      "template-mcp-scope"
+    ]
+  },
+  "templates": {
+    "safecode": {
+      "title": {
+        "en": "SafeCode",
+        "zh-CN": "SafeCode"
+      },
+      "description": {
+        "en": "Edit locally, run everything in Nebius sandboxes. Nothing you ask for runs on this computer.",
+        "zh-CN": "本地只改文件，一切运行都在 Nebius 沙箱里；本机不会执行你要求的任何东西。"
+      },
+      "icon": "./icon.svg",
+      "launcher": "both"
+    }
+  },
   "providers": {
     "token-factory": {
       "providerApi": 1,

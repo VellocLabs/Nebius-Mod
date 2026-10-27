@@ -1,10 +1,17 @@
 # Nebius Token Factory plugin
 
-Three parts, one plugin:
+Four parts, one plugin:
 
 - **Models:** Nebius Token Factory on Velloc's Models page.
 - **Sandboxes:** cloud execution, parallel development and tests.
+- **SafeCode:** a session type that edits locally and runs only in sandboxes.
 - **Web search:** Tavily tools and a search history panel.
+
+The plugin waits until the **Nebius Token Factory** provider has a saved key
+(`requires.providers`) and until Velloc knows the `template-mcp-scope`
+feature (`requires.features`); before that, Settings → Plugins shows why and
+nothing below takes effect. The provider itself is always offered on the
+Models page, since that is where the key is saved.
 
 ## Model provider
 
@@ -178,6 +185,42 @@ need this setting (or allow rules for `mcp__contree` and `mcp__nebius`).
   each lane with `sandbox_lane_patch` and `git apply --index`, one lane at
   a time.
 
+## SafeCode session type
+
+The plugin adds a session type, **SafeCode** (id `nebius:safecode`), to the
+sidebar and the project menu with the Nebius icon. Its boundary:
+
+| | SafeCode (Nebius) |
+|---|---|
+| Local read | Read, Glob, Grep |
+| Local write | SuperEdit only, with per-turn file snapshots and `WorkspaceDiff` for review |
+| Local execution | none: no shell, exec, sub-agent or WebFetch tool is in the session |
+| MCP | this plugin's servers only (`mcp: plugin`): contree, Tavily and the `mcp__nebius__*` tools |
+| Execution | in Nebius sandboxes: `rsync` → `run` → `read_file`; lanes and `sandbox_test_matrix` |
+| Skills | exactly `nebius:setup`; inline shell expansion in skill bodies is not performed |
+
+**The honest statement.** "Nothing runs on this computer" means the model
+cannot cause arbitrary execution here. The one local process the session
+relies on is the plugin's declared MCP server (`uvx contree-mcp`, from
+`.mcp.json`), which the user agreed to by installing the plugin. `rsync`,
+`upload`, `download` and `sandbox_lane_patch` read or write local files and
+ask for permission every time; **Approve remote-only sandbox tools** never
+covers them.
+
+Velloc's own built-in SafeCode type keeps the same local boundary and has no
+execution at all; this type is its sibling with a sandbox as the execution
+engine, under the same name because the promise to this machine is the same.
+It needs a Velloc that understands the template key `mcp: plugin`, declared as
+the `template-mcp-scope` feature in `requires.features`: an older Velloc
+reports the plugin as waiting for that feature instead of running the
+template with every MCP server visible.
+
+The template lives in `templates/safecode/`: `template.md` (frontmatter and
+prompt skeleton), `includes/` (the type's own prose), `welcome.md` and
+`welcome-zh.md` (the starter chips: setup check, sync and test, fix and
+verify in a sandbox, parallel test matrix, understand, review; none runs
+anything here).
+
 ## Tavily
 
 In Models → **Nebius Token Factory**, save an optional **Tavily API key**.
@@ -213,8 +256,9 @@ Older runtimes cannot use the moved Project ID or Tavily credential route.
 ## Files
 
 ```
-.claude-plugin/plugin.json   the manifest: provider, userConfig
+.claude-plugin/plugin.json   the manifest: provider, requires, templates, userConfig
 icon.svg                     the Token Factory mark (the favicon tokenfactory.nebius.com serves)
+templates/safecode/          the SafeCode session type: template.md, includes/, welcome*.md
 providers/config.js          every fact about the model server
 providers/logic.js           the pure logic: listing -> rows, tier -> body edit
 providers/nebius.js          the provider hooks
