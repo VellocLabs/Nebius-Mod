@@ -150,7 +150,7 @@ test('manifest: the SafeCode template is declared, titled by its brand word, wit
   assert.ok(template.description['zh-CN'].length > 0)
   assert.equal(template.icon, './icon.svg')
   assert.equal(template.launcher, 'both')
-  for (const file of ['template.md', 'welcome.md', 'welcome-zh.md', join('includes', 'nebius_safecode_intro.md'), join('includes', 'nebius_safecode_using_tools.md')]) {
+  for (const file of ['template.md', 'welcome.md', 'welcome-zh.md', join('includes', 'nebius_safecode_intro.md'), join('includes', 'nebius_safecode_using_tools.md'), join('includes', 'nebius_safecode_working.md')]) {
     assert.ok(read(file).length > 0, `${file} is present`)
   }
 })
@@ -167,13 +167,18 @@ test('template: SafeCode takes MCP from this plugin only, names its skills exact
   assert.deepEqual(fm.agents, ['Explore', 'Plan', 'general-purpose'])
   assert.equal(fm.noExecution, undefined, 'mcp: plugin and noExecution exclude each other')
   const body = read('template.md')
-  for (const holder of ['!nebius_safecode_intro', '!nebius_safecode_using_tools', '!tool_call_parallelism', '!delivering_work', '!autonomy', '$mcp_servers', '$environment', '$memory']) {
+  for (const holder of ['!nebius_safecode_intro', '!nebius_safecode_using_tools', '!nebius_safecode_working', '!tool_call_parallelism', '!delivering_work', '!autonomy', '$mcp_servers', '$environment', '$memory']) {
     assert.ok(body.includes(`\n${holder}\n`), `prompt skeleton has ${holder}`)
   }
   assert.match(body, /\n## begin\s*$/)
 })
 
 test('template: the intro opens on the local boundary, speaks as the agent name, and closes on the four-part rule', () => {
+  const working = read('includes', 'nebius_safecode_working.md')
+  for (const fact of ['SuperEdit', 'lane:<name>', 'disposable: true', 'disposable: false', 'WorkspaceDiff']) {
+    assert.ok(working.includes(fact), `the working loop names ${fact}`)
+  }
+  assert.ok(!/sub-?agent|test_matrix/i.test(working), 'the working loop steers toward neither sub-agents nor the matrix')
   const intro = read('includes', 'nebius_safecode_intro.md')
   assert.match(intro, /^Nothing runs on this computer\./)
   assert.match(intro, /\{\{AGENT_NAME\}\}/)

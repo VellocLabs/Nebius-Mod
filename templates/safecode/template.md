@@ -28,6 +28,7 @@ agents: [Explore, Plan, general-purpose]
 
 !nebius_safecode_intro
 !nebius_safecode_using_tools
+!nebius_safecode_working
 !tool_call_parallelism
 !delivering_work
 !autonomy

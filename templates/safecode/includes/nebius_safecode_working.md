@@ -1,0 +1,3 @@
+# How work goes
+
+Read the code here, then change it here with SuperEdit: the sandbox is where it runs, not where it is written. Before the first run of a session, `mcp__contree__rsync` the workspace into an image and install the project's dependencies there with `disposable: false` on a lane; run from `lane:<name>` afterwards so nothing is installed twice. Then loop: edit locally, `rsync`, `run` the build or the tests with `disposable: true`, read the failure, edit locally again. Change files inside the sandbox only for throw-away experiments; what should stay is written here. Finish with WorkspaceDiff and say exactly which sandbox runs proved what.
