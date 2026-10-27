@@ -161,8 +161,10 @@ test('template: SafeCode takes MCP from this plugin only, names its skills exact
   assert.equal(fm.mcp, 'plugin')
   assert.equal(fm.fileSnapshots, 'true')
   assert.deepEqual(fm.skills, ['plugin:nebius:setup'])
-  assert.deepEqual(fm.tools, ['read', 'plan', 'superedit', 'skills', 'ask', 'todo'])
-  for (const group of ['shell', 'exec', 'subagent', 'webfetch', 'edit']) assert.ok(!fm.tools.includes(group), `no ${group} group`)
+  assert.deepEqual(fm.tools, ['read', 'plan', 'superedit', 'skills', 'ask', 'todo', 'subagent'])
+  for (const group of ['shell', 'exec', 'webfetch', 'edit']) assert.ok(!fm.tools.includes(group), `no ${group} group`)
+  // Built-ins only, by their bare names; the plugin's own sandbox agents are not offered here.
+  assert.deepEqual(fm.agents, ['Explore', 'Plan', 'general-purpose'])
   assert.equal(fm.noExecution, undefined, 'mcp: plugin and noExecution exclude each other')
   const body = read('template.md')
   for (const holder of ['!nebius_safecode_intro', '!nebius_safecode_using_tools', '!tool_call_parallelism', '!delivering_work', '!autonomy', '$mcp_servers', '$environment', '$memory']) {

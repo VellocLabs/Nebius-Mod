@@ -5,8 +5,11 @@ description: Edit locally with SuperEdit, run everything in Nebius sandboxes.
 #   local read   -> Read / Glob / Grep
 #   local write  -> SuperEdit only (permission-gated per path), reviewed with
 #                   WorkspaceDiff from the per-turn file snapshots
-#   execution    -> none on this computer: no shell, exec, subagent or webfetch
-#                   group; everything that runs, runs in a Nebius sandbox
+#   execution    -> none on this computer: no shell, exec or webfetch group;
+#                   everything that runs, runs in a Nebius sandbox
+#   sub-agents   -> Velloc's built-in ones only, each started on this same
+#                   template: no shell, the same sandbox servers. The main
+#                   agent decides whether and how to use them.
 #   MCP          -> this plugin's servers only (`mcp: plugin`): contree and
 #                   Tavily, plus the mod's own `mcp__nebius__*` tools
 #   skills       -> the exact list below; a skill body's inline `!` shell
@@ -14,10 +17,11 @@ description: Edit locally with SuperEdit, run everything in Nebius sandboxes.
 # `rsync`, `upload`, `download` and `sandbox_lane_patch` read or write local
 # files and keep asking the user for permission; the plugin's MCP server is
 # the one local process this session relies on.
-tools: [read, plan, superedit, skills, ask, todo]
+tools: [read, plan, superedit, skills, ask, todo, subagent]
 mcp: plugin
 fileSnapshots: true
 skills: [plugin:nebius:setup]
+agents: [Explore, Plan, general-purpose]
 ---
 
 ## prompt

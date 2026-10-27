@@ -194,10 +194,11 @@ sidebar and the project menu with the Nebius icon. Its boundary:
 |---|---|
 | Local read | Read, Glob, Grep |
 | Local write | SuperEdit only, with per-turn file snapshots and `WorkspaceDiff` for review |
-| Local execution | none: no shell, exec, sub-agent or WebFetch tool is in the session |
+| Local execution | none: no shell, exec or WebFetch tool is in the session |
 | MCP | this plugin's servers only (`mcp: plugin`): contree, Tavily and the `mcp__nebius__*` tools |
 | Execution | in Nebius sandboxes: `rsync` → `run` → `read_file`; lanes and `sandbox_test_matrix` |
 | Skills | exactly `nebius:setup`; inline shell expansion in skill bodies is not performed |
+| Sub-agents | Velloc's built-in `Explore`, `Plan` and `general-purpose` (`agents:`), each started on this same type — no shell, the same servers; the plugin's `sandbox-dev` / `sandbox-tester` agents are for ordinary sessions and are not offered here |
 
 **The honest statement.** "Nothing runs on this computer" means the model
 cannot cause arbitrary execution here. The one local process the session
