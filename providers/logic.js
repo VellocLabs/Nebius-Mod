@@ -16,6 +16,7 @@ import {
   FAST_SUFFIX,
   FEATURE,
   LISTING_PATH,
+  MODEL_NAMES,
   REASONING_REPLAY_FIELD,
   REASONING_REPLAY_FIELDS,
   TAGS,
@@ -147,7 +148,7 @@ export function wireOf(reasons, record) {
  * The rows `provider.models` answers.
  *
  * The listing is the authority on WHAT is served and how it is billed (id,
- * name, context, modality, price, tools, reasoning); the catalog record fills
+ * context, modality, price, tools, reasoning); the catalog record fills
  * only what it leaves out (output cap, reasoning efforts, the replay field)
  * and stands in for a row that states no features.
  *
@@ -175,9 +176,10 @@ export function buildModels({ listing, catalog }) {
 
     const row = {
       id,
-      name: typeof item.name === 'string' && item.name.trim() !== ''
-        ? item.name.trim()
-        : typeof record?.name === 'string' && record.name.trim() !== '' ? record.name.trim() : id,
+      name: Object.hasOwn(MODEL_NAMES, id.toLowerCase())
+        ? MODEL_NAMES[id.toLowerCase()]
+        : typeof item.name === 'string' && item.name.trim() !== '' ? item.name.trim()
+          : typeof record?.name === 'string' && record.name.trim() !== '' ? record.name.trim() : id,
       supportsTools,
       contextWindow,
       maxOutputTokens: outputCapOf(record?.maxOutput, contextWindow),

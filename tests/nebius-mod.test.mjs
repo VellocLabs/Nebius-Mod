@@ -130,6 +130,53 @@ test('listing: keeps active text-out models once, drops embeddings, image models
   assert.equal(rows[0].name, 'GLM-5.3')
 })
 
+test('listing: concise Nemotron names preserve IDs and model capabilities', () => {
+  const models = [
+    ['nvidia/Nemotron-3.5-Super-VL', 'Nemotron 3.5 Super VL'],
+    ['nvidia/Nemotron-3_5-Lightning', 'Nemotron 3.5 Lightning'],
+    ['nvidia/Nemotron-3-Nano-30B-A3B', 'Nemotron 3 Nano'],
+    ['nvidia/nemotron-3-super-120b-a12b', 'Nemotron 3 Super'],
+    ['nvidia/Nemotron-3-Ultra-550b-a55b', 'Nemotron 3 Ultra'],
+  ]
+  for (const [id, name] of models) {
+    for (const listingName of ['Vendor name', ' ', undefined]) {
+      const item = { ...LISTING.data[0], id, name: listingName }
+      const record = CATALOG['zai-org/GLM-5.3']
+      const [row] = buildModels({ listing: { data: [item] }, catalog: { [id]: record } })
+      const [original] = buildModels({ listing: { data: [{ ...item, id: 'other/model' }] }, catalog: { 'other/model': record } })
+      assert.deepEqual(row, { ...original, id, name })
+      assert.equal(item.name, listingName)
+    }
+    const uppercaseId = id.toUpperCase()
+    const [row] = buildModels({ listing: { data: [{ id: uppercaseId }] } })
+    assert.equal(row.name, name)
+    assert.equal(row.id, uppercaseId)
+  }
+})
+
+test('listing: unlisted names keep vendor, catalog, then ID fallback without shortening variants', () => {
+  const items = [
+    { id: 'deepseek-ai/DeepSeek-V4.1-Flash', name: ' DeepSeek V4.1 Flash ' },
+    { id: 'nvidia/nemotron-3-super-120b-a12b-fast', name: 'Nemotron 3 Super 120B A12B Fast' },
+    { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', name: 'Nemotron 3 Nano Omni' },
+    { id: 'other/catalog', name: ' ' },
+    { id: 'other/unnamed' },
+    { id: 'toString' },
+  ]
+  const rows = buildModels({ listing: { data: items }, catalog: {
+    [items[0].id]: { name: 'Catalog name' },
+    'other/catalog': { name: ' Catalog fallback ' },
+  } })
+  assert.deepEqual(rows.map(row => [row.id, row.name]), [
+    [items[0].id, 'DeepSeek V4.1 Flash'],
+    [items[1].id, items[1].name],
+    [items[2].id, items[2].name],
+    ['other/catalog', 'Catalog fallback'],
+    ['other/unnamed', 'other/unnamed'],
+    ['toString', 'toString'],
+  ])
+})
+
 test('listing: tools and reasoning come from supported_features; the catalog stands in when the row states none', () => {
   const rows = byId(buildModels({ listing: LISTING, catalog: CATALOG }))
   assert.equal(rows['zai-org/GLM-5.3'].supportsTools, true)

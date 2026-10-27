@@ -44,6 +44,14 @@ export const ACTIVE_STATUS = 'active'
  */
 export const CATALOG_KEY = 'nebius'
 
+export const MODEL_NAMES = {
+  'nvidia/nemotron-3.5-super-vl': 'Nemotron 3.5 Super VL',
+  'nvidia/nemotron-3_5-lightning': 'Nemotron 3.5 Lightning',
+  'nvidia/nemotron-3-nano-30b-a3b': 'Nemotron 3 Nano',
+  'nvidia/nemotron-3-super-120b-a12b': 'Nemotron 3 Super',
+  'nvidia/nemotron-3-ultra-550b-a55b': 'Nemotron 3 Ultra',
+}
+
 /**
  * Where to look when the `nebius` catalog entry lacks a listed model: the
  * model maker's own entry, by the organisation half of the id
