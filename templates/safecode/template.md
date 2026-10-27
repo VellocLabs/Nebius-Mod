@@ -12,6 +12,8 @@ description: Edit locally with SuperEdit, run everything in Nebius sandboxes.
 #                   agent decides whether and how to use them.
 #   MCP          -> this plugin's servers only (`mcp: plugin`): contree and
 #                   Tavily, plus the mod's own `mcp__nebius__*` tools
+#   web          -> Tavily search / extract / crawl, whenever the work needs
+#                   the web; it is the only reach to the web this type has
 #   skills       -> the exact list below; a skill body's inline `!` shell
 #                   expansion is not performed in a `mcp: plugin` session
 # `rsync`, `upload`, `download` and `sandbox_lane_patch` read or write local

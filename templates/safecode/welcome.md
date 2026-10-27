@@ -17,6 +17,9 @@ suggestions:
   - title: Run the whole suite in parallel
     description: Shard the tests across throw-away sandboxes.
     prompt: Prepare one sandbox image with this project's dependencies installed, split the test suite into shards, and run them all at once with the sandbox test matrix. Summarize the result per shard and show the output of every failure.
+  - title: Look it up on the web
+    description: Documentation, an error message, a changelog — through Tavily.
+    prompt: Search the web for what this needs — the library's documentation, the exact error message, or the changelog of the version in use — read the relevant pages, and tell me what applies here with the sources. Then propose the change, if one follows.
   - title: Understand this codebase
     description: Explore the architecture, modules, and important flows.
     prompt: Help me understand this codebase by reading it. Identify the main components, important entry points, data flow, and the parts I should read first.

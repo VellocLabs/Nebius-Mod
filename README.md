@@ -198,6 +198,7 @@ sidebar and the project menu with the Nebius icon. Its boundary:
 | MCP | this plugin's servers only (`mcp: plugin`): contree, Tavily and the `mcp__nebius__*` tools |
 | Execution | in Nebius sandboxes: `rsync` → `run` → `read_file`; lanes and `sandbox_test_matrix` |
 | Skills | exactly `nebius:setup`; inline shell expansion in skill bodies is not performed |
+| Web | Tavily search, extract, map and crawl (`mcp__tavily__*`), whenever the work needs the web — documentation, an error message, a changelog — or the user asks; the type's only reach to the web. Needs the optional Tavily key; without it the model says so once and goes on |
 | Sub-agents | Velloc's built-in `Explore`, `Plan` and `general-purpose` (`agents:`), each started on this same type — no shell, the same servers; the plugin's `sandbox-dev` / `sandbox-tester` agents are for ordinary sessions and are not offered here |
 
 **The honest statement.** "Nothing runs on this computer" means the model
