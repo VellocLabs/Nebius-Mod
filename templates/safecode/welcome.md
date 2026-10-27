@@ -14,9 +14,6 @@ suggestions:
   - title: Fix a bug, verify in a sandbox
     description: Read here, edit here, run the relevant tests in a sandbox.
     prompt: Investigate this bug by reading the code, find the root cause, and make the smallest reliable fix with SuperEdit. Then sync the workspace into a sandbox and run the tests that cover the change there. Tell me what the sandbox showed and what you could not verify.
-  - title: Run the whole suite in parallel
-    description: Shard the tests across throw-away sandboxes.
-    prompt: Prepare one sandbox image with this project's dependencies installed, split the test suite into shards, and run them all at once with the sandbox test matrix. Summarize the result per shard and show the output of every failure.
   - title: Look it up on the web
     description: Documentation, an error message, a changelog — through Tavily.
     prompt: Search the web for what this needs — the library's documentation, the exact error message, or the changelog of the version in use — read the relevant pages, and tell me what applies here with the sources. Then propose the change, if one follows.

@@ -191,13 +191,13 @@ test('template: the intro opens on the local boundary, speaks as the agent name,
   }
 })
 
-test('template: the welcome chips come in English and Chinese, seven each, and none asks to run anything here', () => {
+test('template: the welcome chips come in English and Chinese, six each, and none asks to run anything here', () => {
   for (const file of ['welcome.md', 'welcome-zh.md']) {
     const text = read(file)
     assert.ok(frontmatter(text).greeting.length > 0, `${file} has a greeting`)
     const chips = text.match(/^\s+- title: /gm) ?? []
-    assert.equal(chips.length, 7, `${file} has seven chips`)
-    assert.equal((text.match(/^\s+prompt: /gm) ?? []).length, 7, `${file} gives every chip a prompt`)
+    assert.equal(chips.length, 6, `${file} has six chips`)
+    assert.equal((text.match(/^\s+prompt: /gm) ?? []).length, 6, `${file} gives every chip a prompt`)
   }
   const prompts = read('welcome.md').split('\n').filter(line => /^\s+prompt: /.test(line)).join('\n')
   assert.doesNotMatch(prompts, /run (it|them|the tests|the suite) (here|locally|on this (computer|machine))/i)
