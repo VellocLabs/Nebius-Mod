@@ -36,6 +36,7 @@ import {
 } from './sandbox/lanes.js'
 import { isActive, missingPermissions, operationIdOf, replyOf, resultImageOf } from './sandbox/replies.js'
 import { MATRIX_SCHEMA, planMatrix, summarize } from './sandbox/matrix.js'
+import { isWindowsSource, normalizeDestination, withRelayout } from './sandbox/paths.js'
 import { normalizeOperations, paneTree } from './sandbox/view.js'
 import { loadTexts } from './sandbox/texts.js'
 import { createTaskHistory, historyDetail, historyRows, sanitizeTask } from './sandbox/history.js'
@@ -297,6 +298,8 @@ export function register(on, options = {}) {
   let ticks = 0
   let refreshing = false
   const tracked = new Map()
+  // directory_state_id -> destination, for folders synced from Windows.
+  const syncedLayouts = new Map()
 
   const now = () => Date.now()
   const viewRef = $ => ({ plugin: $.plugin.name, key: 'view' })
@@ -594,7 +597,7 @@ export function register(on, options = {}) {
     const started = await Promise.all(
       plan.shards.map(async shard => {
         try {
-          const reply = await callContree($, 'run', shard.args)
+          const reply = await callContree($, 'run', withRelayout(shard.args, syncedLayouts))
           const operationId = operationIdOf(reply)
           if (!operationId) return { name: shard.name, command: shard.args.command, error: `run answered no operation id: ${JSON.stringify(reply).slice(0, 300)}` }
           tracked.set(operationId, { lane: resolved.lane, agentId: e.agentId, startedAt: now() })
@@ -755,7 +758,12 @@ export function register(on, options = {}) {
     const { tool: _tool, tool_use_id: _id, agentId, ...args } = e
     const guarded = guardCall(tool, args, { lanes, agentId, defaultImage: config.defaultImage, maxRunSeconds: config.maxRunSeconds })
     if (guarded.deny) return { deny: guarded.deny }
-    const ran = await next({ ...e, ...guarded.args })
+    const ran = await next({ ...e, ...(tool === 'run' ? withRelayout(guarded.args, syncedLayouts) : guarded.args) })
+    if (tool === 'rsync' && !ran?.isError) {
+      const id = Number(dataOf(ran))
+      const destination = normalizeDestination(args.destination)
+      if (Number.isInteger(id) && destination && isWindowsSource(args.source)) syncedLayouts.set(id, destination)
+    }
     if (tool !== 'run' || ran?.isError) return ran
 
     const reply = dataOf(ran)

@@ -173,7 +173,10 @@ service still returns them. Full logs may be truncated.
 check of the tools that touch only the sandbox (`run`, the image, file-read
 and operation tools, and the plugin's own tools except `sandbox_lane_patch`)
 with *allow*. `rsync`, `upload`, `download` and `sandbox_lane_patch` read or
-write local files and still ask. Background sub-agents cannot ask, so they
+write local files and this setting never covers them. Velloc allows MCP tools
+unless a permission rule says otherwise, so to be asked before each of them,
+add them to `permissions.ask` in Velloc's settings (`"ask": ["mcp__contree__rsync",
+"mcp__contree__upload", "mcp__contree__download", "mcp__nebius__sandbox_lane_patch"]`). Background sub-agents cannot ask, so they
 need this setting (or allow rules for `mcp__contree` and `mcp__nebius`).
 
 ### Parallel work
@@ -205,9 +208,9 @@ sidebar and the project menu with the Nebius icon. Its boundary:
 cannot cause arbitrary execution here. The one local process the session
 relies on is the plugin's declared MCP server (`uvx contree-mcp`, from
 `.mcp.json`), which the user agreed to by installing the plugin. `rsync`,
-`upload`, `download` and `sandbox_lane_patch` read or write local files and
-ask for permission every time; **Approve remote-only sandbox tools** never
-covers them.
+`upload`, `download` and `sandbox_lane_patch` read or write local files; they
+ask first only when a `permissions.ask` rule names them (see above), and
+**Approve remote-only sandbox tools** never covers them.
 
 Velloc's own built-in SafeCode type keeps the same local boundary and has no
 execution at all; this type is its sibling with a sandbox as the execution

@@ -24,6 +24,7 @@ import {
 } from '../hooks/sandbox/lanes.js'
 import { MAX_SHARDS, operationIdOf, outcomeOf, planMatrix, summarize } from '../hooks/sandbox/matrix.js'
 import { patchCommand, shellQuote } from '../hooks/sandbox/patch.js'
+import { isWindowsSource, normalizeDestination, relayoutStep, withRelayout } from '../hooks/sandbox/paths.js'
 import { candidateTags, fill, translator } from '../hooks/sandbox/texts.js'
 import { normalizeOperations, paneTree } from '../hooks/sandbox/view.js'
 import { migrateLanes, readGlobalLanes, writeLaneChanges } from '../hooks/sandbox/storage.js'
@@ -510,6 +511,45 @@ test('mod: a refused call never reaches the server; other tools pass through unt
   const passed = await mod.fire('tool.call', { tool: 'mcp__contree__rsync', tool_use_id: 't', source: '/p', destination: '/app' }, async e => ({ ref: 2, text: '42', e }))
   assert.equal(passed.ref, 2)
   assert.equal(passed.e.source, '/p')
+})
+
+test('paths: Windows sources are recognised and a run from their files is relaid out first', () => {
+  for (const source of ['D:\\project\\app', 'd:/project/app', '\\\\server\\share\\app']) assert.equal(isWindowsSource(source), true, source)
+  for (const source of ['/home/me/app', '~/app', 'relative\\path', undefined]) assert.equal(isWindowsSource(source), false, String(source))
+  assert.equal(normalizeDestination('/app/'), '/app')
+  assert.equal(normalizeDestination('/'), '/')
+  assert.equal(normalizeDestination(''), null)
+
+  assert.equal(
+    relayoutStep("/it's"),
+    `( find '/it'\\''s' -maxdepth 1 -name '*\\\\*' | while IFS= read -r f; do n=$(printf '%s' "$f" | tr '\\\\' '/'); mkdir -p "\${n%/*}" && mv -f "$f" "$n"; done ) >/dev/null 2>&1`,
+  )
+  const layouts = new Map([[7, '/app']])
+  const run = { command: 'cd /app && pytest', image: 'i', directory_state_id: 7 }
+  assert.equal(withRelayout(run, layouts).command, `${relayoutStep('/app')}; cd /app && pytest`)
+  assert.equal(run.command, 'cd /app && pytest', 'the caller\'s arguments are not changed')
+  for (const untouched of [{ ...run, directory_state_id: 8 }, { command: 'ls', image: 'i' }, { ...run, shell: false }]) {
+    assert.equal(withRelayout(untouched, layouts), untouched)
+  }
+})
+
+test('mod: files rsynced from Windows are moved into their folders before a run or a matrix shard uses them', async () => {
+  const mod = loadMod({ options: { default_image: 'tag:py' }, server: tool => (tool === 'run' ? { uuid: '01a17f99-0e26-758c-a18c-da7e8faa7c6d' } : tool === 'wait_operations' ? { results: {} } : {}) })
+  await mod.fire('session.start', {})
+  await mod.fire('tool.call', { tool: 'mcp__contree__rsync', tool_use_id: 't1', source: 'D:\\work\\app', destination: '/app/' }, async () => ({ text: '7' }))
+  await mod.fire('tool.call', { tool: 'mcp__contree__rsync', tool_use_id: 't2', source: '/home/me/app', destination: '/srv' }, async () => ({ text: '8' }))
+
+  const commandOf = async (id) => {
+    let ranWith
+    await mod.fire('tool.call', { tool: 'mcp__contree__run', tool_use_id: `r${id}`, command: 'pytest', image: 'tag:py', directory_state_id: id }, async e => ((ranWith = e), { text: '{}' }))
+    return ranWith.command
+  }
+  assert.equal(await commandOf(7), `${relayoutStep('/app')}; pytest`)
+  assert.equal(await commandOf(8), 'pytest', 'a POSIX source arrives with its folders')
+
+  await mod.fire('tool.call', { tool: 'mcp__nebius__sandbox_test_matrix', tool_use_id: 'm', image: 'tag:py', directory_state_id: 7, shards: ['pytest a', 'pytest b'] })
+  const shardCommands = mod.calls.filter(call => call.tool === 'run').map(call => call.args.command)
+  assert.deepEqual(shardCommands, [`${relayoutStep('/app')}; pytest a`, `${relayoutStep('/app')}; pytest b`])
 })
 
 test('mod: an async run is tracked for the pane until it ends', async () => {

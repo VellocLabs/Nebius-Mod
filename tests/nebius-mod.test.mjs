@@ -178,7 +178,7 @@ test('template: the intro opens on the local boundary, speaks as the agent name,
   assert.ok(/mcp__tavily__\*.*whenever the work needs/.test(tools), 'Tavily is for whatever the work needs from the web, not only on request')
   assert.ok(tools.includes('do not ask for the key again'), 'a missing Tavily key is said once')
   const working = read('includes', 'nebius_safecode_working.md')
-  for (const fact of ['SuperEdit', 'lane:<name>', 'disposable: true', 'disposable: false', 'WorkspaceDiff']) {
+  for (const fact of ['SuperEdit', 'lane:<name>', 'disposable: true', 'disposable: false', 'WorkspaceDiff', 'directory_state_id', 'reproduce it in the sandbox before changing the code']) {
     assert.ok(working.includes(fact), `the working loop names ${fact}`)
   }
   assert.ok(!/sub-?agent|test_matrix/i.test(working), 'the working loop steers toward neither sub-agents nor the matrix')
@@ -189,6 +189,11 @@ test('template: the intro opens on the local boundary, speaks as the agent name,
   for (const tool of ['mcp__contree__rsync', 'mcp__contree__upload', 'mcp__contree__download', 'mcp__nebius__sandbox_lane_patch']) {
     assert.ok(intro.includes(tool), `${tool} is named as a tool that touches local files`)
   }
+  for (const text of [intro, tools, working]) {
+    assert.ok(!/rsync[^.]*into an image|returns the image to run from/.test(text), 'rsync answers a directory_state_id, not an image')
+    assert.ok(!/always ask|permission every time/.test(text), 'whether a tool asks is the user\'s permission settings\' call')
+  }
+  assert.match(tools, /`mcp__contree__rsync`[^\n]*answers a `directory_state_id`/)
 })
 
 test('template: the welcome chips come in English and Chinese, six each, and none asks to run anything here', () => {

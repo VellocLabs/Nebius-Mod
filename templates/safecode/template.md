@@ -17,8 +17,8 @@ description: Edit locally with SuperEdit, run everything in Nebius sandboxes.
 #   skills       -> the exact list below; a skill body's inline `!` shell
 #                   expansion is not performed in a `mcp: plugin` session
 # `rsync`, `upload`, `download` and `sandbox_lane_patch` read or write local
-# files and keep asking the user for permission; the plugin's MCP server is
-# the one local process this session relies on.
+# files; whether they ask first is the user's permission settings' call. The
+# plugin's MCP server is the one local process this session relies on.
 tools: [read, plan, superedit, skills, ask, todo, subagent]
 mcp: plugin
 fileSnapshots: true
