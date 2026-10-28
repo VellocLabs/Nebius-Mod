@@ -18,7 +18,7 @@ export function imageRows(images, operations, lanes) {
   return [...rows.values()].sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0) || a.uuid.localeCompare(b.uuid))
 }
 
-const isSavedImage = image => !!(image.saved || image.operation || image.heads?.length || image.checkpoint)
+export const isSavedImage = image => !!(image.saved || image.operation || image.heads?.length || image.checkpoint)
 const matchesImage = (image, filter, query) =>
   (filter === 'saved' ? isSavedImage(image) : !isSavedImage(image)) &&
   `${image.uuid} ${image.tag ?? ''} ${(image.heads ?? []).join(' ')}`.toLowerCase().includes(query.toLowerCase())

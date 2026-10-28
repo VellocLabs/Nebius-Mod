@@ -1,6 +1,6 @@
 /** Compact file-first Sandbox pane. Only supported desktop Mod primitives. */
 import { isActive, statusOf } from './replies.js'
-import { imagesTree } from './images.js'
+import { imagesTree, isSavedImage } from './images.js'
 import { tasksTree } from './tasks.js'
 import { localTime } from './details.js'
 import { fileTree } from './files.js'
@@ -39,7 +39,7 @@ export function paneTree(ui,view,t,actions,now) {
     Box({gap:1,children:[
       Button({key:'section:tasks',label:`Tasks (${view.totalCalls ?? 0})`,variant:tab==='tasks'?'primary':'secondary',onPress:()=>actions.showSection('tasks')}),
       Button({key:'section:lanes',label:`Lanes (${view.lanes.length})`,variant:tab==='lanes'?'primary':'secondary',onPress:()=>actions.showSection('lanes')}),
-      Button({key:'section:images',label:`Images (${view.images?.rows.length ?? 0})`,variant:tab==='images'?'primary':'secondary',onPress:()=>actions.showSection('images')}),
+      Button({key:'section:images',label:`Images (${(view.images?.rows ?? []).filter(isSavedImage).length})`,variant:tab==='images'?'primary':'secondary',onPress:()=>actions.showSection('images')}),
     ]}),
     Button({key:'refresh',label:t('browse.refreshStatus'),plain:true,onPress:actions.refresh}),
   ]))

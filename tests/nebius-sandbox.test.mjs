@@ -870,6 +870,17 @@ test('sidebar: image tab browses unbound result without changing lane head', asy
   assert.equal(mod.record.state.get('view').browser.image, 'img-0')
 })
 
+test('pane: the Images tab counts only images the work produced, before and after the catalog loads', () => {
+  const actions = { showSection() {}, refresh() {}, reconnect() {}, clearHistory() {}, inspectOperation() {}, togglePanel() {}, backLatest() {}, backImages() {}, copyImage() {} }
+  const base = { mcp: { isConnected: true }, lanes: [], ops: [], quota: { running: 0, max: 50 }, section: 'tasks' }
+  const label = images => buttonsOf(paneTree(elements, { ...base, images }, t, actions, NOW)).find(b => b.props.key === 'section:images').props.label
+  const own = [{ uuid: 'out', saved: true }, { uuid: 'head', heads: ['auth'] }, { uuid: 'old', checkpoint: true }]
+  assert.equal(label({ rows: own }), 'Images (3)')
+  const catalog = Array.from({ length: 40 }, (_, i) => ({ uuid: `base-${i}`, tag: 'python' }))
+  assert.equal(label({ rows: [...own, ...catalog], loaded: true }), 'Images (3)', 'loading the account catalog does not change the count')
+  assert.equal(label(undefined), 'Images (0)')
+})
+
 test('compact pane: resources/history folded by default; SVG files and functional controls', async () => {
   const mod = loadMod({ store: new Map([['global-lane/auth', laneTable().auth]]), server: tool => tool === 'list_files' ? { files: [{ name: 'main.py', type: 'file', size: 2048 }, { name: 'src', type: 'directory' }] } : { operations: [] } })
   mod.$.ui.copy = async ({ text }) => { mod.record.copied = text; return { isCopied: true } }
