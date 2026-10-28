@@ -3,7 +3,7 @@
 # inside the type's boundary: read and edit locally, run only in a sandbox.
 # No chip asks for anything to run on this computer.
 # `welcome-<locale>.md` siblings carry the other languages.
-greeting: What should I change here and run in the sandbox?
+greeting: What would you like to work on?
 suggestions:
   - title: Check my sandbox is ready
     description: What is still missing, and who does it.

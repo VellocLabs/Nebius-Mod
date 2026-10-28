@@ -1,7 +1,7 @@
 ---
 # `nebius:safecode`（SafeCode）的欢迎页，zh 版本。结构见 `welcome.md`；
 # 只翻译用户可见的值。
-greeting: 本地改什么，沙箱里跑什么？
+greeting: 你想做什么？
 suggestions:
   - title: 检查我的沙箱是否就绪
     description: 还缺什么，由谁来做。

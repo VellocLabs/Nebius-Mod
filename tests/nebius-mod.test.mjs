@@ -196,8 +196,11 @@ test('template: the intro opens on the local boundary, speaks as the agent name,
   assert.match(tools, /`mcp__contree__rsync`[^\n]*answers a `directory_state_id`/)
 })
 
-test('template: the welcome chips come in English and Chinese, six each, and none asks to run anything here', () => {
-  for (const file of ['welcome.md', 'welcome-zh.md']) {
+test('template: the welcome chips come in every main UI language, six each, and none asks to run anything here', () => {
+  // The main UI's locales (nexus_web translate.ts): en, zh, es, fr, de, ja, ko.
+  // The default `welcome.md` is the en page; the rest are exact-locale files.
+  const files = ['welcome.md', 'welcome-zh.md', 'welcome-es.md', 'welcome-fr.md', 'welcome-de.md', 'welcome-ja.md', 'welcome-ko.md']
+  for (const file of files) {
     const text = read(file)
     assert.ok(frontmatter(text).greeting.length > 0, `${file} has a greeting`)
     const chips = text.match(/^\s+- title: /gm) ?? []
