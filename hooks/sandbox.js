@@ -376,7 +376,9 @@ export function register(on, options = {}) {
     try {
       await reloadLanes($)
       await reloadHistory()
-      const blocked = () => !view.mcp?.isConnected || view.mcp.authError || view.mcp.missing
+      const stats = statsKey ? await $.store.get(statsKey).catch(() => null) : null
+      if (Number.isSafeInteger(stats?.totalCalls)) view = { ...view, totalCalls: Math.max(view.totalCalls, stats.totalCalls) }
+      const blocked =() => !view.mcp?.isConnected || view.mcp.authError || view.mcp.missing
       if (blocked()) await checkServer($)
       if (blocked()) return
       const identity = await callContree($, 'whoami', {})
@@ -680,8 +682,19 @@ export function register(on, options = {}) {
     t = await loadTexts($)
     tEn = await loadTexts($, 'en')
     lanes = await migrateLanes($.store)
-    statsKey = `monitor/${await $.session.id()}`
-    const stats = await $.store.get(statsKey).catch(() => null)
+    // One running total across sessions: the Tasks tab counts every run ever made.
+    statsKey = 'monitor/total'
+    let stats = await $.store.get(statsKey).catch(() => null)
+    if (!stats) {
+      // Earlier versions counted per session; fold those counts into the total once.
+      let carried = 0
+      for (const key of (await $.store.keys().catch(() => [])).filter(key => key.startsWith('monitor/') && key !== statsKey)) {
+        const old = await $.store.get(key).catch(() => null)
+        if (Number.isSafeInteger(old?.totalCalls)) carried += old.totalCalls
+      }
+      stats = { totalCalls: carried }
+      await $.store.set(statsKey, stats).catch(() => undefined)
+    }
     view = { ...view, selectedLane: Object.keys(lanes)[0] ?? null, totalCalls: Number.isSafeInteger(stats?.totalCalls) ? stats.totalCalls : 0 }
     for (const [name, spec] of Object.entries(OWN_TOOLS)) {
       await $.tool.register({ name, ...spec })
@@ -707,8 +720,13 @@ export function register(on, options = {}) {
     const liveTask = task ?? historyDetail({ callId: id, method: e.tool, args: taskInput, startedAt: started, pending: true })
     view = { ...view, latestTask: liveTask, totalCalls: view.totalCalls + 1, selectedLane: lane && lanes[lane] ? lane : view.selectedLane, calls: [...view.calls, { id, tool: e.tool, lane, started }] }
     if (statsKey) {
-      const totalCalls = view.totalCalls
-      saveStatsQueue = saveStatsQueue.then(() => $.store.set(statsKey, { totalCalls })).catch(() => undefined)
+      // Read-increment-write so other sessions' runs are added to, not overwritten.
+      saveStatsQueue = saveStatsQueue.then(async () => {
+        const stored = await $.store.get(statsKey)
+        const totalCalls = (Number.isSafeInteger(stored?.totalCalls) ? stored.totalCalls : 0) + 1
+        await $.store.set(statsKey, { totalCalls })
+        view = { ...view, totalCalls: Math.max(view.totalCalls, totalCalls) }
+      }).catch(() => undefined)
     }
     await saveTask(task)
     await publish($)

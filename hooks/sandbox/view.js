@@ -37,7 +37,7 @@ export function paneTree(ui,view,t,actions,now) {
   const tab = view.section ?? 'tasks'
   children.push(row([
     Box({gap:1,children:[
-      Button({key:'section:tasks',label:`Tasks (${view.ops.length})`,variant:tab==='tasks'?'primary':'secondary',onPress:()=>actions.showSection('tasks')}),
+      Button({key:'section:tasks',label:`Tasks (${view.totalCalls ?? 0})`,variant:tab==='tasks'?'primary':'secondary',onPress:()=>actions.showSection('tasks')}),
       Button({key:'section:lanes',label:`Lanes (${view.lanes.length})`,variant:tab==='lanes'?'primary':'secondary',onPress:()=>actions.showSection('lanes')}),
       Button({key:'section:images',label:`Images (${view.images?.rows.length ?? 0})`,variant:tab==='images'?'primary':'secondary',onPress:()=>actions.showSection('images')}),
     ]}),

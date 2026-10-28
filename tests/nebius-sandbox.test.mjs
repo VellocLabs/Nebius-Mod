@@ -705,6 +705,7 @@ test('sidebar: auto opens without stealing focus, selects lane, renders lazy tre
   assert.equal(mod.record.state.get('view').selectedLane, 'demo')
   assert.equal(mod.record.state.get('view').totalCalls, 1)
   let tree = await mod.fire('ui.render', { component: 'Pane', requestId: 'sandbox' })
+  assert.equal(buttonsOf(tree).find(b => b.props.key === 'section:tasks').props.label, 'Tasks (1)')
   await buttonsOf(tree).find(b => b.props.key === 'section:lanes').onPress()
   tree = await mod.fire('ui.render', { component: 'Pane', requestId: 'sandbox' })
   assert.ok(flatten(tree).some(node => node.type === 'Select' && node.props.value === 'demo'))
@@ -712,11 +713,26 @@ test('sidebar: auto opens without stealing focus, selects lane, renders lazy tre
   tree = await mod.fire('ui.render', { component: 'Pane', requestId: 'sandbox' })
   assert.ok(buttonsOf(tree).some(button => button.props.key === 'file:/src/main.py'))
   assert.equal(mod.record.state.get('view').totalCalls, 1, 'browser MCP reads do not inflate user tool count')
-  assert.equal(store.get('monitor/session-1').totalCalls, 1)
+  assert.equal(store.get('monitor/total').totalCalls, 1)
   assert.equal(mod.hooks.some(hook => hook.matcher?.component === 'AbovePrompt'), false)
   const restored = loadMod({ store })
   await restored.fire('session.start', {})
   assert.equal(restored.record.state.get('view').totalCalls, 1)
+  await restored.fire('tool.call', { tool: 'mcp__nebius__sandbox_lane_new', tool_use_id: 'again', name: 'demo2', from: 'image-demo' })
+  await restored.settle()
+  assert.equal(store.get('monitor/total').totalCalls, 2, 'the total keeps counting across sessions')
+})
+
+test('sidebar: per-session counts from earlier versions fold into the total once', async () => {
+  const store = new Map([['monitor/session-a', { totalCalls: 5 }], ['monitor/session-b', { totalCalls: 7 }]])
+  const mod = loadMod({ store, server: () => ({ operations: [] }) })
+  await mod.fire('session.start', {})
+  await mod.settle()
+  assert.equal(mod.record.state.get('view').totalCalls, 12)
+  assert.equal(store.get('monitor/total').totalCalls, 12)
+  const again = loadMod({ store, server: () => ({ operations: [] }) })
+  await again.fire('session.start', {})
+  assert.equal(again.record.state.get('view').totalCalls, 12, 'folded only once')
 })
 
 test('sidebar: overlapping tools remain visible independently and errors are not success', async () => {
@@ -1011,6 +1027,8 @@ test('pane styling: colored connection, red clear button, no detail blocks outsi
   assert.equal(clear.props.label, ZH['history.clear'])
   assert.equal(clear.children[0].props.color, 'red')
   assert.equal(buttonsOf(tree).find(b => b.props.key === 'section:tasks').props.label, 'Tasks (0)')
+  const counted = paneTree(elements, { ...base, section: 'tasks', totalCalls: 23, ops: Array.from({ length: 20 }, (_, i) => ({ id: `op-${i}`, state: 'SUCCESS' })) }, t, actions, NOW)
+  assert.equal(buttonsOf(counted).find(b => b.props.key === 'section:tasks').props.label, 'Tasks (23)', 'the tab counts runs, not listed rows')
 })
 
 test('preview normalizes Windows line endings, enforces read cap and renders a separate card', async () => {
