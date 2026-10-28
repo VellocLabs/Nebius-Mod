@@ -225,6 +225,20 @@ manifest declares `"projectFolder": "required"`, so a new session asks for a
 folder (or takes the last one used for SafeCode) instead of opening in the
 shared workspace. A Velloc that does not know the key ignores it.
 
+**Folder guard.** In a SafeCode session the plugin refuses, at `tool.check`,
+any local path outside the session folder (the working directory and the
+project root): Read, Glob and Grep paths, a SuperEdit script path and each of
+its per-file reads and writes, `rsync`'s source, `upload`'s path,
+`download`'s destination and `sandbox_lane_patch`'s `out`. The session's
+memory directory and its scratchpad are allowed. A path is judged as written,
+`.` and `..` collapsed, and by its real path where the host resolves one. The
+model is told why; the band above the prompt says what was blocked (with a
+count when there were several) until it is dismissed. Other session types are
+not touched. It needs a Velloc that serves `$.session.type()`,
+`$.session.memoryDir()` and `$.session.scratchpadDir()`, declared as the
+`session-type` feature in `requires.features`. The code is
+`hooks/safecode.js` and `hooks/safecode/paths.js`.
+
 The template lives in `templates/safecode/`: `template.md` (frontmatter and
 prompt skeleton), `includes/` (the type's own prose), `welcome.md` and
 `welcome-zh.md` (the starter chips: setup check, sync and test, fix and

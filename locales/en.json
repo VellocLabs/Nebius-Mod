@@ -230,5 +230,9 @@
   "setup.tavily.label": "Tavily API key (web search)",
   "setup.tavily.ok": "saved",
   "setup.tavily.missing": "not saved. Get one at https://tavily.com and save it in Models → Nebius → Tavily API key; if search is still missing, start a new session.",
-  "setup.tavily.unknown": "could not be checked."
+  "setup.tavily.unknown": "could not be checked.",
+  "safecode.denied": "SafeCode refused {tool}: {path} is outside the session folder. A SafeCode session may read and write only inside its project folder, its memory directory and its scratchpad. Do not retry with another path outside them; tell the user what you needed and why.",
+  "safecode.band": "Blocked: the model tried a {tool} on {path}, outside this SafeCode session's folder. SafeCode does not allow it.",
+  "safecode.bandMany": "Blocked {count} operations SafeCode does not allow. Latest: {tool} on {path}, outside this session's folder.",
+  "safecode.dismiss": "Dismiss"
 }

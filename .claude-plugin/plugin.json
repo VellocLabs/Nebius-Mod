@@ -18,7 +18,8 @@
       "token-factory"
     ],
     "features": [
-      "template-mcp-scope"
+      "template-mcp-scope",
+      "session-type"
     ]
   },
   "templates": {

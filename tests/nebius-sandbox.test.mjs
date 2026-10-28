@@ -714,7 +714,8 @@ test('sidebar: auto opens without stealing focus, selects lane, renders lazy tre
   assert.ok(buttonsOf(tree).some(button => button.props.key === 'file:/src/main.py'))
   assert.equal(mod.record.state.get('view').totalCalls, 1, 'browser MCP reads do not inflate user tool count')
   assert.equal(store.get('monitor/total').totalCalls, 1)
-  assert.equal(mod.hooks.some(hook => hook.matcher?.component === 'AbovePrompt'), false)
+  const engineBand = { type: 'engine', ref: 0 }
+  assert.equal(await mod.fire('ui.render', { component: 'AbovePrompt', requestId: 'band' }, async () => engineBand), engineBand, 'the band stays empty outside SafeCode')
   const restored = loadMod({ store })
   await restored.fire('session.start', {})
   assert.equal(restored.record.state.get('view').totalCalls, 1)

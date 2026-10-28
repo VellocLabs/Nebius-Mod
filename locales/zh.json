@@ -231,5 +231,9 @@
   "setup.tavily.label": "Tavily API 密钥（联网搜索）",
   "setup.tavily.ok": "已保存",
   "setup.tavily.missing": "未保存。请在 https://tavily.com 获取，并保存到 模型 → Nebius → Tavily 密钥；若仍无法搜索，请新建一个会话。",
-  "setup.tavily.unknown": "无法检查。"
+  "setup.tavily.unknown": "无法检查。",
+  "safecode.denied": "SafeCode 拒绝了 {tool}：{path} 在会话文件夹之外。SafeCode 会话只能读写它的项目文件夹、memory 目录和 scratchpad。不要换一个同样在外面的路径重试；告诉用户你需要什么、为什么需要。",
+  "safecode.band": "已拦截：模型尝试对 {path} 执行 {tool}，该路径在本 SafeCode 会话的文件夹之外，SafeCode 不允许此操作。",
+  "safecode.bandMany": "已拦截 {count} 次 SafeCode 不允许的操作。最近一次：对 {path} 执行 {tool}，该路径在本会话的文件夹之外。",
+  "safecode.dismiss": "关闭"
 }

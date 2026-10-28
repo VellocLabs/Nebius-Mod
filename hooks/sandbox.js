@@ -17,6 +17,7 @@
  *   tools' failures carry the check's report.
  */
 
+import { registerSafeCode } from './safecode.js'
 import { registerTavily } from './tavily.js'
 import {
   CONTREE_SERVER,
@@ -144,6 +145,7 @@ export function register(on, options = {}) {
     maxRunSeconds: optionNumber(options.max_run_seconds, 1800),
     autoApprove: options.auto_approve_remote === true,
   }
+  registerSafeCode(on)
   registerTavily(on, { setup: async $ => (await probeSetup($, { parts: ['search'] })).tavilyKey })
 
   let root = null
