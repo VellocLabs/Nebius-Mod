@@ -32,7 +32,8 @@
         "zh-CN": "本地只改文件，一切运行都在 Nebius 沙箱里；本机不会执行你要求的任何东西。"
       },
       "icon": "./icon.svg",
-      "launcher": "both"
+      "launcher": "both",
+      "projectFolder": "required"
     }
   },
   "providers": {

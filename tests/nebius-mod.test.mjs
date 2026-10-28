@@ -150,6 +150,7 @@ test('manifest: the SafeCode template is declared, titled by its brand word, wit
   assert.ok(template.description['zh-CN'].length > 0)
   assert.equal(template.icon, './icon.svg')
   assert.equal(template.launcher, 'both')
+  assert.equal(template.projectFolder, 'required', 'a SafeCode session works in a project folder the person picks')
   for (const file of ['template.md', 'welcome.md', 'welcome-zh.md', join('includes', 'nebius_safecode_intro.md'), join('includes', 'nebius_safecode_using_tools.md'), join('includes', 'nebius_safecode_working.md')]) {
     assert.ok(read(file).length > 0, `${file} is present`)
   }

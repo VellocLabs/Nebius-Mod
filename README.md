@@ -220,6 +220,11 @@ the `template-mcp-scope` feature in `requires.features`: an older Velloc
 reports the plugin as waiting for that feature instead of running the
 template with every MCP server visible.
 
+A SafeCode session works in a project folder, as Velloc's Code does: the
+manifest declares `"projectFolder": "required"`, so a new session asks for a
+folder (or takes the last one used for SafeCode) instead of opening in the
+shared workspace. A Velloc that does not know the key ignores it.
+
 The template lives in `templates/safecode/`: `template.md` (frontmatter and
 prompt skeleton), `includes/` (the type's own prose), `welcome.md` and
 `welcome-zh.md` (the starter chips: setup check, sync and test, fix and
