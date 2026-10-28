@@ -27,34 +27,37 @@ const LOCAL_PATH_ARGS = Object.freeze({
 /** The tools the guard checks, for a `tool.check` matcher. */
 export const GUARDED_TOOLS = Object.freeze(Object.keys(LOCAL_PATH_ARGS))
 
-const GLOB_CHARS = /[*?[\]{}]/
-
-/** The local paths `input` names for `tool`; a Glob pattern counts by its fixed prefix. */
+/** The local paths `input` names for `tool`; a Glob pattern counts by the folder it searches. */
 export function localPathsOf(tool, input) {
   const args = input && typeof input === 'object' ? input : {}
   const paths = (LOCAL_PATH_ARGS[tool] ?? [])
     .map(name => args[name])
     .filter(value => typeof value === 'string' && value !== '')
   if (tool === 'Glob' && typeof args.pattern === 'string' && args.pattern !== '') {
-    const prefix = fixedPrefix(args.pattern)
-    if (isAbsolute(prefix)) {
-      paths.push(prefix)
-    } else if (prefix.split('/').includes('..')) {
+    const root = globSearchRoot(args.pattern)
+    if (isAbsolute(args.pattern)) {
+      if (root !== '') paths.push(root)
+    } else if (root.split('/').includes('..')) {
       // A relative pattern climbing out of its search folder is placed under it.
       const under = typeof args.path === 'string' && args.path !== '' ? toSlashes(args.path).replace(/\/+$/, '') : '.'
-      paths.push(`${under}/${prefix}`)
+      paths.push(`${under}/${root}`)
     }
   }
   return paths
 }
 
-/** The leading run of a glob pattern's segments that hold no glob character. */
-export function fixedPrefix(pattern) {
-  const segments = toSlashes(pattern).split('/')
-  const cut = segments.findIndex(segment => GLOB_CHARS.test(segment))
-  const kept = cut === -1 ? segments : segments.slice(0, cut)
-  const joined = kept.join('/')
-  return joined === '' || /^[A-Za-z]:$/.test(joined) ? `${joined}/` : joined
+/**
+ * The folder an absolute Glob pattern searches, as the host splits it: for a
+ * pattern with no `*?[{`, its dirname; otherwise everything before the last
+ * `/` ahead of the first of them. `''` when no `/` comes first.
+ */
+export function globSearchRoot(pattern) {
+  const p = toSlashes(pattern)
+  const first = p.search(/[*?[{]/)
+  const cut = first === -1 ? p.lastIndexOf('/') : p.lastIndexOf('/', first)
+  if (cut === -1) return ''
+  const root = cut === 0 ? '/' : p.slice(0, cut)
+  return /^[A-Za-z]:$/.test(root) ? `${root}/` : root
 }
 
 function toSlashes(path) {
@@ -95,6 +98,15 @@ export function normalize(path, base) {
     }
   }
   return `${drive}/${out.join('/')}`
+}
+
+/** `[parent, name]` of normalized `path`, or undefined at its root. */
+export function splitLast(path) {
+  const at = path.lastIndexOf('/')
+  const name = path.slice(at + 1)
+  if (at === -1 || name === '') return undefined
+  const parent = path.slice(0, at)
+  return [parent === '' || /^[A-Za-z]:$/.test(parent) ? `${parent}/` : parent, name]
 }
 
 /** Whether normalized `path` is `root` or lies beneath it. */

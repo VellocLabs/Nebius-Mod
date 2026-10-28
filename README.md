@@ -230,9 +230,15 @@ any local path outside the session folder (the working directory and the
 project root): Read, Glob and Grep paths, a SuperEdit script path and each of
 its per-file reads and writes, `rsync`'s source, `upload`'s path,
 `download`'s destination and `sandbox_lane_patch`'s `out`. The session's
-memory directory and its scratchpad are allowed. A path is judged as written,
-`.` and `..` collapsed, and by its real path where the host resolves one. The
-model is told why; the band above the prompt says what was blocked (with a
+memory directory and its scratchpad are allowed, and the folders are read
+again on each check, so a change of working directory or of the memory
+setting is followed. A path is judged as written, `.` and `..` collapsed, and
+by its real path; a path not yet made is judged by the real path of its
+nearest existing ancestor, so a link inside the folder cannot be written
+through, and a path whose real path cannot be had is refused. An absolute Glob
+pattern is judged by the folder the host searches: its dirname when it has no
+glob character. Windows junctions are not resolved by the host, so one inside
+the folder is not followed. The model is told why; the band above the prompt says what was blocked (with a
 count when there were several) until it is dismissed. Other session types are
 not touched. It needs a Velloc that serves `$.session.type()`,
 `$.session.memoryDir()` and `$.session.scratchpadDir()`, declared as the

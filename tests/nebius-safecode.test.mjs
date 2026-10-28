@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { checkPaths, fixedPrefix, localPathsOf, normalize } from '../hooks/safecode/paths.js'
+import { checkPaths, globSearchRoot, localPathsOf, normalize, splitLast } from '../hooks/safecode/paths.js'
 import { registerSafeCode } from '../hooks/safecode.js'
 import { register } from '../hooks/sandbox.js'
 
@@ -45,7 +45,7 @@ test('paths: inside the session folder, memory and scratchpad is allowed; anythi
   assert.deepEqual(checkPaths(['a.ts'], { work: [], memory: null, scratch: null }).allowed, false, 'no folders: nothing is allowed')
 })
 
-test('paths: each guarded tool names its local paths; a Glob pattern counts by its fixed prefix', () => {
+test('paths: each guarded tool names its local paths; a Glob pattern counts by the folder it searches', () => {
   assert.deepEqual(localPathsOf('Read', { file_path: 'C:/x.txt', limit: 3 }), ['C:/x.txt'])
   assert.deepEqual(localPathsOf('Grep', { pattern: 'TODO' }), [], 'no path: the session folder')
   assert.deepEqual(localPathsOf('Glob', { pattern: 'C:/Users/**/*.env' }), ['C:/Users'])
@@ -58,8 +58,17 @@ test('paths: each guarded tool names its local paths; a Glob pattern counts by i
   assert.deepEqual(localPathsOf('mcp__contree__download', { image: 'i', path: '/app/a', destination: 'C:/Windows/a' }), ['C:/Windows/a'])
   assert.deepEqual(localPathsOf('mcp__nebius__sandbox_lane_patch', { name: 'l', path: '/app', out: '../p.diff' }), ['../p.diff'])
   assert.deepEqual(localPathsOf('TodoWrite', { file_path: 'C:/x' }), [], 'an unguarded tool')
-  assert.equal(fixedPrefix('/**/x'), '/')
-  assert.equal(fixedPrefix('C:/*'), 'C:/')
+  assert.equal(globSearchRoot('/**/x'), '/')
+  assert.equal(globSearchRoot('C:/*'), 'C:/')
+  assert.equal(globSearchRoot('C:/x'), 'C:/')
+  assert.equal(globSearchRoot('D:\\work\\ab*\\c'), 'D:/work', 'cut back to the last separator before the first glob character')
+  assert.equal(globSearchRoot('a*'), '')
+  assert.deepEqual(localPathsOf('Glob', { pattern: 'D:/work/proj' }), ['D:/work'], 'a literal pattern searches its dirname')
+  assert.deepEqual(splitLast('D:/a/b'), ['D:/a', 'b'])
+  assert.deepEqual(splitLast('D:/a'), ['D:/', 'a'])
+  assert.deepEqual(splitLast('/a'), ['/', 'a'])
+  assert.equal(splitLast('D:/'), undefined)
+  assert.equal(splitLast('/'), undefined)
 })
 
 // ── the hooks, against a fake $ ──
@@ -75,7 +84,21 @@ const elements = {
   Button: ({ onPress, ...props }) => ({ type: 'Button', props, children: [], onPress }),
 }
 
-function loadGuard({ type = 'nebius:safecode', locale = 'en', memoryDir = MEMORY, scratchpadDir = SCRATCH, realPaths = {}, session = {} } = {}) {
+/**
+ * The fake host's stat: a path under one of `missing` is not there (it throws),
+ * `realPaths` names a path's real path (null: a link leading nowhere), and
+ * anything else is its own real path.
+ */
+function fakeStat(realPaths, missing) {
+  return async path => {
+    const key = path.replace(/\\/g, '/')
+    if (key in realPaths) return realPaths[key] === null ? { kind: 'other', isLink: true } : { kind: 'file', realPath: realPaths[key] }
+    if (missing.some(gone => key === gone || key.startsWith(`${gone}/`))) throw Object.assign(new Error(`ENOENT '${key}'`), { name: 'NotFoundError' })
+    return { kind: 'file', realPath: path }
+  }
+}
+
+function loadGuard({ type = 'nebius:safecode', locale = 'en', memoryDir = MEMORY, scratchpadDir = SCRATCH, realPaths = {}, missing = [], stat, session = {} } = {}) {
   const hooks = []
   registerSafeCode((event, matcherOrFn, maybeFn) => {
     const fn = typeof matcherOrFn === 'function' ? matcherOrFn : maybeFn
@@ -87,7 +110,7 @@ function loadGuard({ type = 'nebius:safecode', locale = 'en', memoryDir = MEMORY
     plugin: Object.freeze({ name: 'nebius', root: pluginDir, locale }),
     fs: {
       read: async path => readFileSync(path, 'utf8'),
-      stat: async path => (realPaths[path] ? { kind: 'file', realPath: realPaths[path] } : { kind: 'file' }),
+      stat: stat ?? fakeStat(realPaths, missing),
     },
     session: {
       type: async () => type,
@@ -155,6 +178,38 @@ test('guard: memory off leaves its directory outside, like any other folder', as
 test('guard: a path inside whose real path leads outside is refused', async () => {
   const guard = loadGuard({ realPaths: { 'D:/code/app/link/secret': 'C:\\Users\\u\\secret' } })
   assert.equal((await guard.check('Read', { file_path: 'D:\\code\\app\\link\\secret' })).decision, 'deny')
+})
+
+test('guard: a file not yet made is judged by its nearest existing ancestor, so a link to outside cannot be written through', async () => {
+  const guard = loadGuard({ realPaths: { 'D:/code/app/link': 'C:/Users/u' }, missing: ['D:/code/app/link', 'D:/code/app/src/new'] })
+  assert.equal((await guard.check('Write', { file_path: 'link/.ssh/authorized_keys' })).decision, 'deny')
+  assert.equal((await guard.check('Write', { file_path: 'D:/code/app/link/new.txt' })).decision, 'deny')
+  assert.equal((await guard.check('Write', { file_path: 'D:/code/app/src/new/deep/a.ts' })).decision, 'allow')
+  assert.equal((await guard.check('Write', { file_path: `${MEMORY}not-yet.md` })).decision, 'allow')
+})
+
+test('guard: a path there but not resolvable, or with no ancestor that resolves, is refused', async () => {
+  const dangling = loadGuard({ realPaths: { 'D:/code/app/dangling': null } })
+  assert.equal((await dangling.check('Write', { file_path: 'D:/code/app/dangling' })).decision, 'deny', 'a link leading nowhere')
+  const nothing = loadGuard({ stat: async path => { throw new Error(`ENOENT '${path}'`) } })
+  assert.equal((await nothing.check('Read', { file_path: 'D:/code/app/a.ts' })).decision, 'deny')
+})
+
+test('guard: an absolute Glob is judged by the folder the host searches; a literal pattern naming the session folder searches its parent', async () => {
+  const guard = loadGuard()
+  assert.equal((await guard.check('Glob', { pattern: 'D:/code/app' })).decision, 'deny')
+  assert.equal((await guard.check('Glob', { pattern: 'D:/code/app/src' })).decision, 'allow')
+  assert.equal((await guard.check('Glob', { pattern: 'D:/code/app/ab*' })).decision, 'allow')
+  assert.equal((await guard.check('Glob', { pattern: 'D:/code/ap*/x' })).decision, 'deny')
+})
+
+test('guard: the folders are read on each check, so a change of folder mid-session is followed', async () => {
+  let cwd = WORK
+  const guard = loadGuard({ session: { cwd: async () => cwd, root: async () => cwd } })
+  assert.equal((await guard.check('Read', { file_path: 'D:/code/next/a.ts' })).decision, 'deny')
+  cwd = 'D:/code/next'
+  assert.equal((await guard.check('Read', { file_path: 'D:/code/next/a.ts' })).decision, 'allow')
+  assert.equal((await guard.check('Read', { file_path: 'D:/code/app/a.ts' })).decision, 'deny')
 })
 
 test('guard: any other session type is left alone and draws nothing', async () => {

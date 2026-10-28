@@ -2,23 +2,47 @@
  * Security: SafeCode's folder guard. In a `nebius:safecode` session a tool
  * call naming a local path outside the session folder is refused at
  * `tool.check`, memory and scratchpad excepted; SuperEdit's per-file steps
- * reach it as Read / Write. A path is judged as written and by its real path
- * where the host resolves one. The band above the prompt says what was
- * refused until dismissed. Other session types are left alone.
+ * reach it as Read / Write. A path is judged as written and by its real path:
+ * a path not yet made, by the real path of its nearest existing ancestor; one
+ * whose real path cannot be had, refused. The folders are read on each check.
+ * The band above the prompt says what was refused until dismissed. Other
+ * session types are left alone, and so is a session whose type cannot be read.
  */
 
-import { GUARDED_TOOLS, SAFECODE_TYPE, checkPaths, localPathsOf, normalize } from './safecode/paths.js'
+import { GUARDED_TOOLS, SAFECODE_TYPE, checkPaths, localPathsOf, normalize, splitLast } from './safecode/paths.js'
 import { loadTexts } from './sandbox/texts.js'
 
 const BAND_KEY = 'safecode-blocked'
 
-/** The real path the host resolves `path` to, or undefined. Never throws. */
-async function realPathOf($, path) {
+/**
+ * What the host's real path of `path` is: `{ real }`, `{ missing: true }` when
+ * nothing is there, or `{}` when something is there but cannot be resolved
+ * (a link leading nowhere). Never throws.
+ */
+async function resolveOne($, path) {
+  let stat
   try {
-    const stat = await $.fs.stat(path, { resolve: true })
-    return typeof stat?.realPath === 'string' ? stat.realPath : undefined
+    stat = await $.fs.stat(path, { resolve: true })
   } catch {
-    return undefined
+    return { missing: true }
+  }
+  return typeof stat?.realPath === 'string' ? { real: stat.realPath } : {}
+}
+
+/**
+ * The real path of normalized `path`; a path not yet made takes its nearest
+ * existing ancestor's, with the rest appended. Undefined when none resolves.
+ */
+async function realPathNear($, path) {
+  const rest = []
+  for (let at = path; ; ) {
+    const found = await resolveOne($, at)
+    if (found.real !== undefined) return rest.length === 0 ? found.real : `${found.real}/${rest.join('/')}`
+    if (!found.missing) return undefined
+    const split = splitLast(at)
+    if (!split) return undefined
+    rest.unshift(split[1])
+    at = split[0]
   }
 }
 
@@ -42,41 +66,47 @@ export function registerSafeCode(on) {
   let tEn = key => key
   const ref = $ => ({ plugin: $.plugin.name, key: BAND_KEY })
 
-  /** The session's guard, read once: `{ active }`, and the folders when active. */
+  /** Whether the session is guarded, read once; the texts with it. */
   function guardOf($) {
     guard ??= (async () => {
       const type = await quiet(() => $.session.type())
       if (type !== SAFECODE_TYPE) return { active: false }
-      // Folders that cannot be read stay empty, so every path is refused.
-      const [cwd, root, memory, scratch] = await Promise.all([
-        quiet(() => $.session.cwd()),
-        quiet(() => $.session.root()),
-        quiet(() => $.session.memoryDir()),
-        quiet(() => $.session.scratchpadDir()),
-      ])
       t = await loadTexts($)
       tEn = await loadTexts($, 'en')
-      const folders = { work: [cwd, root].filter(Boolean), memory, scratch }
-      // The same folders by their real paths, for a path judged by its own.
-      const real = await Promise.all([cwd, root, memory, scratch].map(dir => (dir ? realPathOf($, dir) : undefined)))
-      const realFolders = {
-        work: [real[0] ?? cwd, real[1] ?? root].filter(Boolean),
-        memory: memory ? real[2] ?? memory : null,
-        scratch: scratch ? real[3] ?? scratch : null,
-      }
-      return { active: true, folders, realFolders }
+      return { active: true }
     })()
     return guard
   }
 
+  /** The session's folders as written and by their real paths. Unreadable ones stay empty. */
+  async function foldersOf($) {
+    const [cwd, root, memory, scratch] = await Promise.all([
+      quiet(() => $.session.cwd()),
+      quiet(() => $.session.root()),
+      quiet(() => $.session.memoryDir()),
+      quiet(() => $.session.scratchpadDir()),
+    ])
+    const real = await Promise.all(
+      [cwd, root, memory, scratch].map(dir => {
+        const placed = typeof dir === 'string' ? normalize(dir) : undefined
+        return placed ? realPathNear($, placed) : undefined
+      }),
+    )
+    return {
+      literal: { work: [cwd, root].filter(Boolean), memory, scratch },
+      real: { work: real.slice(0, 2).filter(Boolean), memory: real[2] ?? null, scratch: real[3] ?? null },
+    }
+  }
+
   /** The first path of the call outside the folders, or undefined. */
-  async function outsidePath($, paths, current) {
-    const literal = checkPaths(paths, current.folders)
+  async function outsidePath($, paths) {
+    const folders = await foldersOf($)
+    const literal = checkPaths(paths, folders.literal)
     if (!literal.allowed) return literal.path
     for (const path of paths) {
-      const placed = normalize(path, current.folders.work[0])
-      const real = placed ? await realPathOf($, placed) : undefined
-      if (real && !checkPaths([real], current.realFolders).allowed) return path
+      const placed = normalize(path, folders.literal.work[0])
+      const real = placed ? await realPathNear($, placed) : undefined
+      if (real === undefined || !checkPaths([real], folders.real).allowed) return path
     }
     return undefined
   }
@@ -98,7 +128,7 @@ export function registerSafeCode(on) {
     if (!current.active) return next(e)
     const paths = localPathsOf(e.tool, e.input)
     if (paths.length === 0) return next(e)
-    const path = await outsidePath($, paths, current)
+    const path = await outsidePath($, paths)
     if (path === undefined) return next(e)
     await showBlock($, { tool: e.tool, path })
     return { decision: 'deny', reason: tEn('safecode.denied', { tool: e.tool, path }) }
