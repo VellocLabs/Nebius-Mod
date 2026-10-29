@@ -155,7 +155,14 @@ test('guard: a SafeCode session refuses a read outside its folder, says so above
   assert.equal(refused.reason, EN['safecode.denied'].replace('{tool}', 'Read').replace('{path}', 'C:\\Users\\u\\.ssh\\id_rsa'))
   const band = await guard.band()
   assert.equal(band.type, 'Box')
+  const message = band.children.find(node => node.type === 'Text')
+  assert.deepEqual(
+    { color: message.props.color, weight: message.props.weight, size: message.props.size },
+    { color: 'red', weight: 'medium', size: undefined },
+    'a refusal reads red, at the tree size',
+  )
   assert.deepEqual(textsOf(band), [
+    '⚠ ',
     EN['safecode.band'].replace('{tool}', 'Read').replace('{path}', 'C:\\Users\\u\\.ssh\\id_rsa'),
   ])
 })
@@ -237,6 +244,7 @@ test('guard: the band counts repeated blocks, shows the latest, sits above what 
   assert.equal(tree.props.flexDirection, 'column')
   assert.equal(tree.children[1], other)
   assert.deepEqual(textsOf(tree.children[0]), [
+    '⚠ ',
     ZH['safecode.bandMany'].replace('{count}', '2').replace('{path}', 'C:/Users').replace('{tool}', 'Glob'),
   ])
   const dismiss = tree.children[0].children.find(node => node.type === 'Button')

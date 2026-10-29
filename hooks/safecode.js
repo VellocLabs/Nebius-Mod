@@ -13,6 +13,8 @@ import { GUARDED_TOOLS, SAFECODE_TYPE, checkPaths, localPathsOf, normalize, spli
 import { loadTexts } from './sandbox/texts.js'
 
 const BAND_KEY = 'safecode-blocked'
+// U+26A0 without the emoji selector, so it takes the text's color.
+const WARNING_GLYPH = '⚠ '
 
 /**
  * What the host's real path of `path` is: `{ real }`, `{ missing: true }` when
@@ -147,11 +149,12 @@ export function registerSafeCode(on) {
       justifyContent: 'space-between',
       gap: 1,
       children: [
+        // A refusal: red, at the tree's own size.
         Text({
-          size: 'caption',
-          color: 'yellow',
+          color: 'red',
+          weight: 'medium',
           wrap: 'wrap',
-          children: [t(block.count > 1 ? 'safecode.bandMany' : 'safecode.band', { tool: block.tool, path: block.path, count: block.count })],
+          children: [WARNING_GLYPH, t(block.count > 1 ? 'safecode.bandMany' : 'safecode.band', { tool: block.tool, path: block.path, count: block.count })],
         }),
         Button({
           key: 'safecode-dismiss',
