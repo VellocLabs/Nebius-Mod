@@ -1681,7 +1681,7 @@ test('setup: the probe sees a shell among the session\'s tools, and none in a Sa
     fs: { exists: async () => false },
     process: { run: async () => uvMissing() },
   }
-  const withTools = names => ({ ...base, tools: { list: async () => names.map(name => ({ name, description: '', mcp: false })) } })
+  const withTools = names => ({ ...base, tool: { list: async () => names.map(name => ({ name, description: '', mcp: false })) } })
   assert.equal((await probeSetup(withTools(['Read', 'PowerShell']), { parts: ['sandbox'] })).shell, true)
   assert.equal((await probeSetup(withTools(['Read', 'SuperEdit', 'mcp__nebius__nebius_setup']), { parts: ['sandbox'] })).shell, false)
   assert.equal((await probeSetup(base, { parts: ['sandbox'] })).shell, null)
@@ -1773,6 +1773,19 @@ test('mod: a server that never started puts the setup rows in the pane and after
   const made = await mod.fire('tool.call', { tool: 'mcp__nebius__sandbox_lane_new', tool_use_id: 't', name: 'python-dev' })
   assert.match(made.deny, /^could not look up image tag:python:3\.12: MCP server "contree" is not connected[\s\S]*\n\n✗ uv[\s\S]*\nYou do: uv/)
   assert.doesNotMatch(made.deny, /Tavily/)
+})
+
+test('mod: every $.<noun> the hooks call is one Velloc\'s engine declares, so the plugin is not refused at load', () => {
+  // Velloc refuses a plugin whose modules call a noun no engine.create step provides; this is its list.
+  const engineNouns = new Set(['plugin', 'ui', 'model', 'audio', 'mcp', 'session', 'turn', 'prompt', 'tool', 'command', 'config', 'telemetry', 'agent', 'fs', 'store', 'state', 'clock', 'http', 'process', 'env', 'settings'])
+  const hookFiles = ['hooks/sandbox.js', 'hooks/setup.js', 'hooks/safecode.js', 'hooks/tavily.js', ...readdirSync(join(pluginDir, 'hooks/sandbox')).map(name => `hooks/sandbox/${name}`), ...readdirSync(join(pluginDir, 'hooks/tavily')).map(name => `hooks/tavily/${name}`), ...readdirSync(join(pluginDir, 'hooks/safecode')).map(name => `hooks/safecode/${name}`)]
+  const used = new Set()
+  for (const file of hookFiles) {
+    for (const [, noun] of readFileSync(join(pluginDir, file), 'utf8').matchAll(/\$\.([a-zA-Z]+)\./g)) used.add(noun)
+  }
+  const unknown = [...used].filter(noun => !engineNouns.has(noun))
+  assert.deepEqual(unknown, [], `hooks call nouns Velloc does not declare: ${unknown.join(', ')}`)
+  assert.ok(used.has('tool'), 'the setup check lists the session\'s tools through $.tool')
 })
 
 test('manifest: the Project ID is optional, and nebius_setup must name the part it checks', async () => {

@@ -79,7 +79,7 @@ async function probeUv($, home) {
  * `false` without one, `null` when the session's tools cannot be listed.
  */
 async function probeShell($) {
-  const tools = await quietly(() => $.tools.list())
+  const tools = await quietly(() => $.tool.list())
   if (!Array.isArray(tools)) return null
   return tools.some(tool => SHELL_TOOLS.includes(tool?.name))
 }
