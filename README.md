@@ -1,17 +1,36 @@
 # Nebius Token Factory plugin
 
-Four parts, one plugin:
+A mod for [Velloc](https://github.com/VellocLabs/velloc-bootstrap), shipped in
+its built-in marketplace. Four parts, one plugin:
 
 - **Models:** Nebius Token Factory on Velloc's Models page.
 - **Sandboxes:** cloud execution, parallel development and tests.
 - **SafeCode:** a session type that edits locally and runs only in sandboxes.
 - **Web search:** Tavily tools and a search history panel.
 
+## Quick start
+
+1. Install [Velloc](https://velloc.app/download/VellocSetup.exe) 1.155.2.6 or
+   later.
+2. Settings → **Plugins & Mods** → **nebius** → on.
+3. Settings → **Models** → **Nebius Token Factory** → paste an API key from
+   [tokenfactory.nebius.com](https://tokenfactory.nebius.com/). The models
+   are listed once the key is saved.
+4. For sandboxes and SafeCode: install [uv](https://docs.astral.sh/uv/) and
+   enter the **Project ID** on the same page ([Setup](#setup)).
+   For web search: add a **Tavily API key** there ([Tavily](#tavily)).
+
+Then ask for a sandbox run, or start a **SafeCode** session from the session
+launcher. Anything still missing is reported when it is needed.
+
+To run a local checkout instead of the marketplace build, link this folder as
+`~/.velloc/plugins/nebius` and restart Velloc.
+
 The plugin waits until the **Nebius Token Factory** provider has a saved key
 (`requires.providers`) and until Velloc knows the `template-mcp-scope`
-feature (`requires.features`); before that, Settings → Plugins shows why and
-nothing below takes effect. The provider itself is always offered on the
-Models page, since that is where the key is saved.
+feature (`requires.features`); before that, Settings → Plugins & Mods shows
+why and nothing below takes effect. The provider itself is always offered on
+the Models page, since that is where the key is saved.
 
 ## Model provider
 
