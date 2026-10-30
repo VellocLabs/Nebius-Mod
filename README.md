@@ -27,7 +27,9 @@ launcher. Anything still missing is reported when it is needed.
 
 Watch the tutorial for enabling the Nebius Mod and starting a SafeCode session:
 
-[▶ Watch the 4K setup walkthrough](https://github.com/VellocLabs/Nebius-Mod/blob/main/docs/enable-nebius-mod.mp4)
+https://github.com/user-attachments/assets/dde73df7-6ff8-40d7-a801-afe64ebd869f
+
+[Watch on YouTube](https://youtu.be/kG7AHXIXtSE)
 
 To run a local checkout instead of the marketplace build, link this folder as
 `~/.velloc/plugins/nebius` and restart Velloc.
