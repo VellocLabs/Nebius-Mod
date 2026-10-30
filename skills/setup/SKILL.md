@@ -14,15 +14,22 @@ Python or anything else locally to stand in for it.
    it with ToolSearch `select:mcp__nebius__nebius_setup` first. Bring up
    nothing the check did not mark ✗ or ?: a sandbox request never mentions
    the Tavily key, and an unset default image is not a step.
-2. **Do your part, with permission.** Lines marked "you do this once the user
-   agrees" (installing uv) are yours, not the user's. Ask once with
-   AskUserQuestion, naming the exact command, and if the user still has lines
-   of their own, tell them those in the same question. On yes, run it
-   yourself, then check again: the check reconnects the sandbox server.
+2. **Do your part right away.** Lines marked "you do this with your shell
+   tool" (installing uv) are yours, not the user's: the check marks them so
+   only when this session has a shell. Run the command yourself without
+   asking first (Velloc asks for permission when its settings want that), then
+   check again: the check reconnects the sandbox server. Never try to run an
+   installer through SuperEdit or any other tool that is not a shell.
 3. **Tell the user their part.** Lines marked "the user does this" (the
    Nebius API key, the Project ID, Sandboxes access) go to the user in a
    short list, with where to enter each, in the words the check gave. Never
    ask for a key or ID in chat and never write one to a file. Then wait.
+   When a session has no shell, installing uv is the user's too: relay the
+   check's words (install it in a terminal, or ask an Agent or Code session
+   to), say it once, and do not ask again for permission you cannot use.
+   A sandbox server line that says to start a new session means exactly
+   that: this session will not start it again, so say so instead of
+   checking in a loop.
 4. **Check again** when the user says it is done. Only if a just-installed
    tool is still not found, ask the user to fully quit Velloc (tray icon
    included) and reopen it.

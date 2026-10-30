@@ -1619,7 +1619,7 @@ test('setup: a clean machine lists every missing piece in order, uv first, who f
   const report = setupReport(checks, tEn)
   assert.match(report, /✗ uv \(starts the sandbox server\): not installed\. Install it with `winget install/)
   assert.match(report, /Models → Nebius → Project ID/)
-  assert.match(report, /^You do: uv \(starts the sandbox server\)\. Do not hand this to the user: ask once with AskUserQuestion/m)
+  assert.match(report, /^You do: uv \(starts the sandbox server\)\. Do not hand this to the user and do not ask first: run the command yourself now with your shell tool/m)
   assert.match(report, /^The user does: Nebius API key, Project ID, Tavily API key \(web search\)\./m)
   assert.doesNotMatch(report, /You do: [^\n]*(Default image|Sandbox server)/, 'neither a missing default image nor a waiting server is a step')
 })
@@ -1648,6 +1648,42 @@ test('setup: auth.ini stands in for the key and project; access problems and a r
   assert.match(setupReport(offPath, tEn), /Reconnect in \/sandbox[\s\S]*fully quit Velloc[\s\S]*the user does this/)
   const noImage = setupChecks({ uv: { state: 'ok' }, key: true, project: true }, { mcp: { isConnected: true }, defaultImage: '', parts: ['sandbox'] })
   assert.equal(firstBlocker(noImage), null, 'a missing default image only means naming one per call')
+})
+
+test('setup: without a shell, installing uv is the user\'s, in a terminal or another session', () => {
+  const checks = setupChecks({ uv: { state: 'missing' }, shell: false, key: true, project: true }, { mcp: { isConnected: false, reason: 'failed' }, defaultImage: 'x', parts: ['sandbox'] })
+  assert.deepEqual(checks.find(check => check.id === 'uv'), { id: 'uv', state: 'missing', by: 'user', vars: { noShell: true } })
+  const report = setupReport(checks, tEn)
+  assert.match(report, /✗ uv \(starts the sandbox server\): not installed, and this session has no shell[\s\S]*Agent or Code session[\s\S]*\[the user does this\]/)
+  assert.doesNotMatch(report, /^You do:/m)
+  assert.match(report, /^The user does: uv \(starts the sandbox server\)\./m)
+  const withShell = setupChecks({ uv: { state: 'missing' }, shell: true, key: true, project: true }, { mcp: null, defaultImage: 'x', parts: ['sandbox'] })
+  assert.equal(withShell.find(check => check.id === 'uv').by, 'agent')
+  const unknownShell = setupChecks({ uv: { state: 'missing' }, key: true, project: true }, { mcp: null, defaultImage: 'x', parts: ['sandbox'] })
+  assert.equal(unknownShell.find(check => check.id === 'uv').by, 'agent', 'a Velloc that cannot list tools keeps the agent\'s step')
+})
+
+test('setup: a server Velloc will not launch again in this session asks for a new session', () => {
+  const reason = '"contree" is another MCP server\'s name in this session'
+  const checks = setupChecks({ uv: { state: 'ok', version: 'uv 0.13.6' }, shell: false, key: true, project: true }, { mcp: { isConnected: false, reason }, defaultImage: 'x', parts: ['sandbox'] })
+  assert.equal(firstBlocker(checks).id, 'server')
+  const report = setupReport(checks, tEn)
+  assert.match(report, /✗ Sandbox server: did not start earlier in this session[\s\S]*Start a new session in this folder/)
+  assert.doesNotMatch(report, /Reconnect/)
+})
+
+test('setup: the probe sees a shell among the session\'s tools, and none in a SafeCode session', async () => {
+  const base = {
+    plugin: { name: 'nebius' },
+    settings: { read: async () => savedSettings() },
+    env: { get: async name => (name === 'USERPROFILE' ? 'C:\\Users\\me' : undefined) },
+    fs: { exists: async () => false },
+    process: { run: async () => uvMissing() },
+  }
+  const withTools = names => ({ ...base, tools: { list: async () => names.map(name => ({ name, description: '', mcp: false })) } })
+  assert.equal((await probeSetup(withTools(['Read', 'PowerShell']), { parts: ['sandbox'] })).shell, true)
+  assert.equal((await probeSetup(withTools(['Read', 'SuperEdit', 'mcp__nebius__nebius_setup']), { parts: ['sandbox'] })).shell, false)
+  assert.equal((await probeSetup(base, { parts: ['sandbox'] })).shell, null)
 })
 
 test('setup: a connected server proves uv works, whatever the probe saw', () => {
@@ -1695,7 +1731,7 @@ test('setup: probing reads key presence only, finds the project in pluginConfigs
     process: { run: async () => uvMissing() },
   }
   const facts = await probeSetup($)
-  assert.deepEqual(facts, { key: true, tavilyKey: false, uv: { state: 'offPath' }, project: true, authFile: false })
+  assert.deepEqual(facts, { key: true, tavilyKey: false, uv: { state: 'offPath' }, shell: null, project: true, authFile: false })
   assert.doesNotMatch(JSON.stringify(facts), new RegExp(SEALED))
   assert.deepEqual(await probeSetup({ plugin: { name: 'nebius' } }, { parts: ['search'] }), { key: null, tavilyKey: null }, 'no settings: unknown, not missing')
 })

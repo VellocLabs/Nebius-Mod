@@ -14,6 +14,10 @@ const UV_HOME_DIRS = Object.freeze(['.local/bin', '.cargo/bin'])
 const UV_LOCAL_APP_DATA_DIRS = Object.freeze(['Microsoft/WinGet/Links'])
 const UV_NAMES = Object.freeze(['uvx.exe', 'uvx'])
 const UV_TIMEOUT_MS = 15_000
+/** The tools that can run an installer on this computer; a SafeCode session has neither. */
+const SHELL_TOOLS = Object.freeze(['Bash', 'PowerShell'])
+/** Velloc's answer when a plugin server failed earlier in the session and will not be launched again in it. */
+const STALE_SERVER = /another MCP server's name in this session/
 
 async function quietly(action, fallback = null) {
   try { return await action() } catch { return fallback }
@@ -70,6 +74,16 @@ async function probeUv($, home) {
   return { state: runFailed ? 'unknown' : 'missing' }
 }
 
+/**
+ * Whether this session can run an installer: `true` with a shell tool,
+ * `false` without one, `null` when the session's tools cannot be listed.
+ */
+async function probeShell($) {
+  const tools = await quietly(() => $.tools.list())
+  if (!Array.isArray(tools)) return null
+  return tools.some(tool => SHELL_TOOLS.includes(tool?.name))
+}
+
 /** This plugin's stored options in settings.json, by its config id (`<name>` or `<name>@<source>`). */
 function storedOptions(settings, plugin) {
   const configs = settings?.pluginConfigs
@@ -98,6 +112,7 @@ export async function probeSetup($, { parts = PARTS } = {}) {
   return {
     ...facts,
     uv: await probeUv($, home),
+    shell: await probeShell($),
     project: known(filled(stored?.project_id)),
     authFile: home ? await exists($, `${home}/.config/contree/auth.ini`) : false,
   }
@@ -109,6 +124,9 @@ export async function probeSetup($, { parts = PARTS } = {}) {
  * The server row is `waiting` while uv, the key or the Project ID is unmet: its
  * failure is their consequence, not a step of its own. A connected server
  * started through uvx, so it settles the uv row whatever the probe saw.
+ * Without a shell (`facts.shell === false`) installing uv is the user's: in a
+ * terminal, or by an Agent or Code session. A server Velloc will not launch
+ * again in this session is the user's too: a new session starts it.
  * `mcp` is the contree connection as the pane holds it; `defaultImage` the option.
  */
 export function setupChecks(facts, { mcp = null, defaultImage = '', parts = PARTS } = {}) {
@@ -117,14 +135,20 @@ export function setupChecks(facts, { mcp = null, defaultImage = '', parts = PART
   if (parts.includes('sandbox')) {
     const uv = facts.uv?.state ?? 'unknown'
     if (uv !== 'ok' && mcp?.isConnected) add('uv', 'ok', 'agent', { via: 'server' })
-    else add('uv', uv === 'ok' ? 'ok' : uv === 'offPath' ? 'failed' : uv, uv === 'offPath' ? 'user' : 'agent', uv === 'ok' ? { version: facts.uv.version } : undefined)
+    else if (uv === 'ok') add('uv', 'ok', 'agent', { version: facts.uv.version })
+    else if (uv === 'offPath') add('uv', 'failed', 'user')
+    else if (facts.shell === false) add('uv', uv, 'user', { noShell: true })
+    else add('uv', uv, 'agent')
     const credential = (value, id) => add(id, value === true ? 'ok' : facts.authFile ? 'ok' : value === false ? 'missing' : 'unknown', 'user', value !== true && facts.authFile ? { via: 'auth.ini' } : undefined)
     credential(facts.key, 'key')
     credential(facts.project, 'project')
     const prerequisiteUnmet = checks.some(check => check.state === 'missing' || check.state === 'failed')
     if (prerequisiteUnmet && !mcp?.isConnected) add('server', 'waiting', 'agent')
     else if (!mcp) add('server', 'unknown', 'user')
-    else if (!mcp.isConnected) add('server', 'failed', 'user', { reason: String(mcp.reason ?? mcp.message ?? '') })
+    else if (!mcp.isConnected) {
+      const reason = String(mcp.reason ?? mcp.message ?? '')
+      add('server', 'failed', 'user', STALE_SERVER.test(reason) ? { reason, stale: true } : { reason })
+    }
     else add('server', 'ok', 'user')
     if (mcp?.isConnected) {
       if (mcp.authError) add('access', 'failed', 'user', { message: mcp.authError })
@@ -149,9 +173,15 @@ export function firstBlocker(checks) {
   return checks.find(blocks) ?? null
 }
 
-/** The text key a row reads as: `setup.<id>.<state>`, `.offPath` for uv installed off PATH, `.viaServer` / `.viaFile` for a row met another way. */
+/**
+ * The text key a row reads as: `setup.<id>.<state>`, `.offPath` for uv installed off PATH,
+ * `.noShell` for uv this session cannot install, `.stale` for a server not launched again
+ * in this session, `.viaServer` / `.viaFile` for a row met another way.
+ */
 export function checkTextKey(check) {
   if (check.id === 'uv' && check.state === 'failed') return 'setup.uv.offPath'
+  if (check.id === 'uv' && check.vars?.noShell) return 'setup.uv.noShell'
+  if (check.id === 'server' && check.vars?.stale) return 'setup.server.stale'
   if (check.state === 'ok' && check.vars?.via === 'server') return `setup.${check.id}.viaServer`
   if (check.state === 'ok' && check.vars?.via) return `setup.${check.id}.viaFile`
   return `setup.${check.id}.${check.state}`
