@@ -1669,7 +1669,7 @@ test('setup: a server an older Velloc will not launch again in this session asks
   const checks = setupChecks({ uv: { state: 'ok', version: 'uv 0.13.6' }, shell: false, key: true, project: true }, { mcp: { isConnected: false, reason }, defaultImage: 'x', parts: ['sandbox'] })
   assert.equal(firstBlocker(checks).id, 'server')
   const report = setupReport(checks, tEn)
-  assert.match(report, /✗ Sandbox server: did not start earlier in this session[\s\S]*Start a new session in this folder[\s\S]*1\.155\.3 or later/)
+  assert.match(report, /✗ Sandbox server: did not start earlier in this session[\s\S]*Start a new session in this folder[\s\S]*1\.155\.2\.6 or later/)
   assert.doesNotMatch(report, /Reconnect in/)
 })
 

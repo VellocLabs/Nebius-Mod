@@ -219,7 +219,7 @@
   "setup.server.label": "Sandbox server",
   "setup.server.ok": "connected",
   "setup.server.failed": "not connected ({reason}). Fix the lines above, then press Reconnect in /sandbox or check again.",
-  "setup.server.stale": "did not start earlier in this session, and this version of Velloc does not start it again here. Start a new session in this folder: it starts the server with uv as it is now. Velloc 1.155.3 or later reconnects without a new session.",
+  "setup.server.stale": "did not start earlier in this session, and this version of Velloc does not start it again here. Start a new session in this folder: it starts the server with uv as it is now. Velloc 1.155.2.6 or later reconnects without a new session.",
   "setup.server.unknown": "not checked yet.",
   "setup.server.waiting": "starts by itself once the lines above are done.",
   "setup.access.label": "Sandbox access",

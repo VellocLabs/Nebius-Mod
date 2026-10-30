@@ -16,7 +16,7 @@ const UV_NAMES = Object.freeze(['uvx.exe', 'uvx'])
 const UV_TIMEOUT_MS = 15_000
 /** The tools that can run an installer on this computer; a SafeCode session has neither. */
 const SHELL_TOOLS = Object.freeze(['Bash', 'PowerShell'])
-/** A Velloc before 1.155.3 answers this for a plugin server that failed earlier in the session with a config that has since changed; it never launches it again. */
+/** A Velloc before 1.155.2.6 answers this for a plugin server that failed earlier in the session with a config that has since changed; it never launches it again. */
 const STALE_SERVER = /another MCP server's name in this session/
 
 async function quietly(action, fallback = null) {

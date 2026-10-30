@@ -100,7 +100,7 @@ with who does it: the agent (installing uv, run straight away with its shell
 tool) or the user (the key, the Project ID, Sandboxes access). A session
 with no shell tool — SafeCode — hands installing uv to the user as well: in a
 terminal, or by asking an Agent or Code session to install it, then a check
-again here. A Velloc older than 1.155.3 does not launch a plugin server that
+again here. A Velloc older than 1.155.2.6 does not launch a plugin server that
 failed earlier in the session with a config that has since changed (it
 answers that the name is "another MCP server's name in this session"); on
 such a build the server line says to start a new session instead of

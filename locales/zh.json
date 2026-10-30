@@ -220,7 +220,7 @@
   "setup.server.label": "沙箱服务",
   "setup.server.ok": "已连接",
   "setup.server.failed": "未连接（{reason}）。先解决上面各项，然后在 /sandbox 中点击重新连接，或再检查一次。",
-  "setup.server.stale": "本会话早先启动失败，这个版本的 Velloc 不会在此会话中再次启动它。请在同一文件夹新开一个会话，新会话会用现在的 uv 启动沙箱服务。Velloc 1.155.3 及以后的版本无需新开会话即可重新连接。",
+  "setup.server.stale": "本会话早先启动失败，这个版本的 Velloc 不会在此会话中再次启动它。请在同一文件夹新开一个会话，新会话会用现在的 uv 启动沙箱服务。Velloc 1.155.2.6 及以后的版本无需新开会话即可重新连接。",
   "setup.server.unknown": "尚未检查。",
   "setup.server.waiting": "上面各项完成后会自动启动。",
   "setup.access.label": "沙箱权限",
