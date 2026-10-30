@@ -347,3 +347,16 @@ Without either the workflow does nothing.
 
 To try a change in Velloc before release, link this folder as
 `~/.velloc/plugins/nebius` and restart Velloc.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE). © 2026 VellocLabs.
+
+This plugin is developed by VellocLabs, not by Nebius. Nebius, Nebius Token
+Factory and the Nebius logo (`icon.svg`, used to show which service the plugin
+connects to) are trademarks of Nebius; Tavily is a trademark of its owner.
+They are not covered by the Apache License, which grants no trademark rights.
+
+The plugin ships no third-party code. The `contree-mcp` sandbox server
+(Apache-2.0) is fetched and run by `uvx` on the user's machine, and Tavily is
+a remote service under its own terms.

@@ -1,11 +1,11 @@
 {
   "name": "nebius",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Nebius models, cloud sandboxes, a SafeCode session type and Tavily web search in Velloc.",
   "author": {
-    "name": "Velloc"
+    "name": "VellocLabs"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "mod",
     "provider",
