@@ -23,6 +23,12 @@ its built-in marketplace. Four parts, one plugin:
 Then ask for a sandbox run, or start a **SafeCode** session from the session
 launcher. Anything still missing is reported when it is needed.
 
+## Video walkthrough
+
+Watch the tutorial for enabling the Nebius Mod and starting a SafeCode session:
+
+[▶ Watch the 4K setup walkthrough](https://github.com/VellocLabs/Nebius-Mod/blob/main/docs/enable-nebius-mod.mp4)
+
 To run a local checkout instead of the marketplace build, link this folder as
 `~/.velloc/plugins/nebius` and restart Velloc.
 
