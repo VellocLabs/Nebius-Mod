@@ -99,10 +99,11 @@ access) or `search` (the Tavily key). It answers one line per requirement
 with who does it: the agent (installing uv, run straight away with its shell
 tool) or the user (the key, the Project ID, Sandboxes access). A session
 with no shell tool — SafeCode — hands installing uv to the user as well: in a
-terminal, or by asking an Agent or Code session to install it, then a new
-session. When Velloc will not launch a server that failed earlier in the
-session (it answers that the name is "another MCP server's name in this
-session"), the server line says to start a new session instead of
+terminal, or by asking an Agent or Code session to install it, then a check
+again here. A Velloc older than 1.155.3 does not launch a plugin server that
+failed earlier in the session with a config that has since changed (it
+answers that the name is "another MCP server's name in this session"); on
+such a build the server line says to start a new session instead of
 Reconnect. While uv, the key or the
 Project ID is missing, the server line only waits on them. The Project ID is
 optional for models and is asked for only when a sandbox is wanted. Keys are checked for presence only. Nothing is

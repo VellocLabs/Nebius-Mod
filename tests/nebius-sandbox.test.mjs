@@ -1654,7 +1654,8 @@ test('setup: without a shell, installing uv is the user\'s, in a terminal or ano
   const checks = setupChecks({ uv: { state: 'missing' }, shell: false, key: true, project: true }, { mcp: { isConnected: false, reason: 'failed' }, defaultImage: 'x', parts: ['sandbox'] })
   assert.deepEqual(checks.find(check => check.id === 'uv'), { id: 'uv', state: 'missing', by: 'user', vars: { noShell: true } })
   const report = setupReport(checks, tEn)
-  assert.match(report, /✗ uv \(starts the sandbox server\): not installed, and this session has no shell[\s\S]*Agent or Code session[\s\S]*\[the user does this\]/)
+  assert.match(report, /✗ uv \(starts the sandbox server\): not installed, and this session has no shell[\s\S]*Agent or Code session[\s\S]*check again here[\s\S]*\[the user does this\]/)
+  assert.doesNotMatch(report, /new session/, 'a check again reconnects the server; no new session is needed')
   assert.doesNotMatch(report, /^You do:/m)
   assert.match(report, /^The user does: uv \(starts the sandbox server\)\./m)
   const withShell = setupChecks({ uv: { state: 'missing' }, shell: true, key: true, project: true }, { mcp: null, defaultImage: 'x', parts: ['sandbox'] })
@@ -1663,13 +1664,13 @@ test('setup: without a shell, installing uv is the user\'s, in a terminal or ano
   assert.equal(unknownShell.find(check => check.id === 'uv').by, 'agent', 'a Velloc that cannot list tools keeps the agent\'s step')
 })
 
-test('setup: a server Velloc will not launch again in this session asks for a new session', () => {
+test('setup: a server an older Velloc will not launch again in this session asks for a new session', () => {
   const reason = '"contree" is another MCP server\'s name in this session'
   const checks = setupChecks({ uv: { state: 'ok', version: 'uv 0.13.6' }, shell: false, key: true, project: true }, { mcp: { isConnected: false, reason }, defaultImage: 'x', parts: ['sandbox'] })
   assert.equal(firstBlocker(checks).id, 'server')
   const report = setupReport(checks, tEn)
-  assert.match(report, /✗ Sandbox server: did not start earlier in this session[\s\S]*Start a new session in this folder/)
-  assert.doesNotMatch(report, /Reconnect/)
+  assert.match(report, /✗ Sandbox server: did not start earlier in this session[\s\S]*Start a new session in this folder[\s\S]*1\.155\.3 or later/)
+  assert.doesNotMatch(report, /Reconnect in/)
 })
 
 test('setup: the probe sees a shell among the session\'s tools, and none in a SafeCode session', async () => {

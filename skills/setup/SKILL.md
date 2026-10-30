@@ -28,8 +28,8 @@ Python or anything else locally to stand in for it.
    check's words (install it in a terminal, or ask an Agent or Code session
    to), say it once, and do not ask again for permission you cannot use.
    A sandbox server line that says to start a new session means exactly
-   that: this session will not start it again, so say so instead of
-   checking in a loop.
+   that: this version of Velloc will not start it again in this session,
+   so say so instead of checking in a loop.
 4. **Check again** when the user says it is done. Only if a just-installed
    tool is still not found, ask the user to fully quit Velloc (tray icon
    included) and reopen it.

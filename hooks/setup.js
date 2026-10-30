@@ -16,7 +16,7 @@ const UV_NAMES = Object.freeze(['uvx.exe', 'uvx'])
 const UV_TIMEOUT_MS = 15_000
 /** The tools that can run an installer on this computer; a SafeCode session has neither. */
 const SHELL_TOOLS = Object.freeze(['Bash', 'PowerShell'])
-/** Velloc's answer when a plugin server failed earlier in the session and will not be launched again in it. */
+/** A Velloc before 1.155.3 answers this for a plugin server that failed earlier in the session with a config that has since changed; it never launches it again. */
 const STALE_SERVER = /another MCP server's name in this session/
 
 async function quietly(action, fallback = null) {
@@ -125,8 +125,8 @@ export async function probeSetup($, { parts = PARTS } = {}) {
  * failure is their consequence, not a step of its own. A connected server
  * started through uvx, so it settles the uv row whatever the probe saw.
  * Without a shell (`facts.shell === false`) installing uv is the user's: in a
- * terminal, or by an Agent or Code session. A server Velloc will not launch
- * again in this session is the user's too: a new session starts it.
+ * terminal, or by an Agent or Code session. A server an older Velloc will not
+ * launch again in this session is the user's too: a new session starts it.
  * `mcp` is the contree connection as the pane holds it; `defaultImage` the option.
  */
 export function setupChecks(facts, { mcp = null, defaultImage = '', parts = PARTS } = {}) {
