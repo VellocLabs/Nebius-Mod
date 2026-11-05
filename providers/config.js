@@ -97,6 +97,9 @@ export const DEFAULTS = {
   // none at all) is replaced by this, held to a quarter of the context.
   maxOutputTokens: 32768,
   outputShareOfContext: 4,
+  // Past this context no cap is stated for such a model: the platform picks
+  // the output allowance of a wide-context model itself.
+  wideContextWindow: 900000,
   // Tiers offered to a reasoning model whose catalog record lists no efforts.
   reasoningTiers: ['low', 'medium', 'high'],
   reasoningDefaultTier: 'medium',

@@ -82,7 +82,8 @@ under **API keys**. The base URL can be changed to a regional host
 - **Caps the output safely.** The server refuses a request whose prompt plus
   `max_tokens` exceeds the context, so an output cap that is missing or as
   large as the context becomes 32 768 tokens (at most a quarter of the
-  context).
+  context). A model with a context past 900 000 tokens states no cap in that
+  case: Velloc picks the allowance of a wide-context model.
 - **Speaks one wire**: `openai-chat` at `<base>/chat/completions`, with
   `max_tokens`, the `system` role, and `reasoning_content` replayed on
   assistant messages of reasoning models.

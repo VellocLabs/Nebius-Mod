@@ -297,11 +297,15 @@ test('listing: tiers follow the catalog efforts, else low/medium/high, and reaso
 test('listing: context from the listing; an output cap that fills the context is replaced', () => {
   const rows = byId(buildModels({ listing: LISTING, catalog: CATALOG }))
   assert.equal(rows['zai-org/GLM-5.3'].contextWindow, 1024000)
-  assert.equal(rows['zai-org/GLM-5.3'].maxOutputTokens, DEFAULTS.maxOutputTokens, 'catalog states output = context')
+  assert.equal('maxOutputTokens' in rows['zai-org/GLM-5.3'], false, 'catalog states output = context on a wide context')
   assert.equal(rows['google/gemma-3-27b-it'].maxOutputTokens, 8192)
   assert.equal(rows['moonshotai/Kimi-K3'].maxOutputTokens, 8000)
   assert.equal(outputCapOf(undefined, 16384), 4096, 'held to a quarter of a small context')
   assert.equal(outputCapOf(200000, 131072), DEFAULTS.maxOutputTokens)
+  assert.equal(outputCapOf(undefined, 900000), DEFAULTS.maxOutputTokens)
+  assert.equal(outputCapOf(undefined, 1048576), undefined, 'no cap stated for a wide context')
+  assert.equal(outputCapOf(1048576, 1048576), undefined)
+  assert.equal(outputCapOf(393216, 1048576), 393216)
 })
 
 test('listing: image input from the modality, prices per million, no free flag from a zero listing price', () => {
@@ -330,7 +334,7 @@ test('listing: badges and descriptions', () => {
 test('listing: works with no catalog at all, and refuses a document without data', () => {
   const rows = byId(buildModels({ listing: LISTING, catalog: undefined }))
   assert.equal(rows['moonshotai/Kimi-K3'].supportsTools, false)
-  assert.equal(rows['zai-org/GLM-5.3'].maxOutputTokens, DEFAULTS.maxOutputTokens)
+  assert.equal('maxOutputTokens' in rows['zai-org/GLM-5.3'], false)
   assert.deepEqual(rows['zai-org/GLM-5.3'].thinkingTiers, DEFAULTS.reasoningTiers)
   assert.throws(() => buildModels({ listing: { detail: 'nope' } }), /no "data" list/)
 })

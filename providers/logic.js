@@ -124,11 +124,13 @@ function tierFacts(reasons, record) {
 /**
  * The output cap: the catalog's, unless it is missing or would fill the whole
  * context (the server refuses prompt + `max_tokens` over the context); then
- * the default, held to a share of the context.
+ * the default, held to a share of the context. `undefined` for a wide-context
+ * model with no usable cap: the platform picks its allowance.
  */
 export function outputCapOf(stated, contextWindow) {
   const cap = positive(stated)
   if (cap !== undefined && cap < contextWindow) return cap
+  if (contextWindow > DEFAULTS.wideContextWindow) return undefined
   return Math.max(1, Math.min(DEFAULTS.maxOutputTokens, Math.floor(contextWindow / DEFAULTS.outputShareOfContext)))
 }
 
@@ -174,6 +176,7 @@ export function buildModels({ listing, catalog }) {
     const contextWindow = positive(item.context_length) ?? positive(record?.contextWindow) ?? DEFAULTS.contextWindow
     const vision = inputs.includes('image')
 
+    const maxOutputTokens = outputCapOf(record?.maxOutput, contextWindow)
     const row = {
       id,
       name: Object.hasOwn(MODEL_NAMES, id.toLowerCase())
@@ -182,7 +185,7 @@ export function buildModels({ listing, catalog }) {
           : typeof record?.name === 'string' && record.name.trim() !== '' ? record.name.trim() : id,
       supportsTools,
       contextWindow,
-      maxOutputTokens: outputCapOf(record?.maxOutput, contextWindow),
+      ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
       supportsImageInput: vision,
       supportsPdfInput: false,
       ...tierFacts(reasons, record),
