@@ -85,6 +85,7 @@ test('manifest: one openai-chat provider on the Token Factory host, with the ico
   assert.ok(provider.domains.some(domain => new URL(DEFAULT_BASE_URL).hostname.endsWith(`.${domain}`)))
   assert.ok(provider.modelsUi.starterModels.length > 0 && provider.modelsUi.starterModels.length <= 8)
   for (const id of provider.modelsUi.starterModels) assert.match(id, /^[^/]+\/[^/]+$/)
+  assert.equal(provider.modelsUi.starterModels[0], 'nvidia/Nemotron-3.5-Super-VL', 'the first starter model is the default on first connection')
   assert.deepEqual(Object.keys(provider.modelsUi.tierModels).sort(), ['balanced', 'best', 'fast'])
   for (const id of Object.values(provider.modelsUi.tierModels)) {
     assert.ok(provider.modelsUi.starterModels.includes(id), `tier model ${id} is a starter model`)

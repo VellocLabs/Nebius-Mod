@@ -201,8 +201,8 @@
           }
         },
         "starterModels": [
-          "nvidia/Nemotron-3-Ultra-550b-a55b",
           "nvidia/Nemotron-3.5-Super-VL",
+          "nvidia/Nemotron-3-Ultra-550b-a55b",
           "nvidia/Nemotron-3_5-Lightning",
           "deepseek-ai/DeepSeek-V4.1-Flash"
         ],
