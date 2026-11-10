@@ -1853,7 +1853,7 @@ test('mod: with the server connected, a prompt passes untouched and nothing is p
   assert.equal(probes, counted)
 })
 
-test('mod: a reconnect slower than the wait lets the prompt in as typed and finishes in the background', async () => {
+test('mod: a slow reconnect is waited for, and the prompt then says the tools are here', async () => {
   const uv = UV_FIXED_LATER()
   let release
   let slow = false
@@ -1867,12 +1867,14 @@ test('mod: a reconnect slower than the wait lets the prompt in as typed and fini
   for (let i = 0; i < 5; i++) await mod.settle()
   uv.install()
   slow = true
-  const entered = await mod.fire('prompt.submit', { text: 'go' }, async e => e)
-  assert.deepEqual(entered, { text: 'go' })
-  assert.ok(mod.record.logs.some(line => /^reconnect: prompt enters: timeout after \d+ ms$/.test(line)), 'a timeout is logged')
+  let settled = false
+  const entering = mod.fire('prompt.submit', { text: 'go' }, async e => e).finally(() => { settled = true })
   for (let i = 0; i < 5 && !release; i++) await mod.settle()
+  assert.equal(settled, false, 'the prompt waits while the server connects')
   release()
-  for (let i = 0; i < 5; i++) await mod.settle()
+  const entered = await entering
+  assert.deepEqual(entered.context, [EN['prompt.sandboxJoined']])
+  assert.ok(mod.record.logs.some(line => /^reconnect: prompt enters: joined after \d+ ms$/.test(line)))
   assert.equal(mod.record.state.get('view').mcp.isConnected, true)
 })
 

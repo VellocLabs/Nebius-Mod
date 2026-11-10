@@ -55,8 +55,6 @@ const IDLE_TICKS = 10
 const WAIT_SLICE_SECONDS = 240
 const TRACK_KEEP_MS = 24 * 3600 * 1000
 const ALL_CONTREE_TOOLS = [...REMOTE_ONLY_TOOLS, 'rsync', 'upload', 'download']
-/** How long a prompt waits for a reconnect; under Velloc's 5 s hook budget. A slower one finishes in the background. */
-const PROMPT_RECONNECT_WAIT_MS = 4000
 
 /** The plugin's own tools; `sandbox_lane_patch` can write a local file, so it is never auto-approved. */
 const OWN_TOOLS = {
@@ -747,11 +745,9 @@ export function register(on, options = {}) {
         })
         .finally(() => { promptReconnect = null })
     }
-    const waited = $.clock.sleep(PROMPT_RECONNECT_WAIT_MS).then(
-      () => 'timeout',
-      error => `sleep failed: ${messageOf(error)}`,
-    )
-    const outcome = await Promise.race([promptReconnect.then(joined => (joined ? 'joined' : 'not joined')), waited])
+    // The whole reconnect is awaited: its time is spent in `$` calls, which
+    // Velloc's hook budget does not count, and the tools then join this turn.
+    const outcome = (await promptReconnect) ? 'joined' : 'not joined'
     await logReconnect($, `prompt enters: ${outcome} after ${Date.now() - started} ms`)
     if (outcome !== 'joined') return next(e)
     return next({ ...e, context: [...(Array.isArray(e.context) ? e.context : []), tEn('prompt.sandboxJoined')] })
