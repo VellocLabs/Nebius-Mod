@@ -351,6 +351,9 @@ export function register(on, options = {}) {
     const report = setupReport(await runSetup($, parts), tEn)
     // Tools a server brings mid-turn are offered from the next prompt on.
     const joinedNow = parts.includes('sandbox') && wasDown && view.mcp?.isConnected === true
+    if (wasDown) {
+      try { await $.ui.log(`reconnect: nebius_setup found the server down; now ${view.mcp?.isConnected ? 'connected (tools from the next prompt)' : `still down (${String(view.mcp?.reason ?? '').slice(0, 200)})`}`) } catch {}
+    }
     return { result: joinedNow ? `${report}\n${tEn('setup.report.joinedNextPrompt')}` : report }
   }
 
@@ -717,19 +720,40 @@ export function register(on, options = {}) {
   // A server that failed earlier is tried again before the user's next prompt
   // enters, once uv runs: its tools then join this turn, not the one after.
   let promptReconnect = null
+  // Debug-log lines (`[mods] nebius: reconnect: …`); a failed log never stops the hook.
+  const logReconnect = async ($, text) => {
+    try { await $.ui.log(`reconnect: ${text}`) } catch {}
+  }
   on('prompt.submit', async ($, e, next) => {
-    if (!view.mcp || view.mcp.isConnected) return next(e)
+    if (!view.mcp) {
+      await logReconnect($, 'skipped: the server state is not known yet')
+      return next(e)
+    }
+    if (view.mcp.isConnected) return next(e)
+    const started = Date.now()
+    await logReconnect($, `server down (${String(view.mcp.reason ?? 'no reason').slice(0, 200)}); ${promptReconnect ? 'joining the reconnect in flight' : 'trying again'}`)
     if (!promptReconnect) {
       promptReconnect = (async () => {
-        if ((await probeUvNow($)).state !== 'ok') return false
+        const uv = await probeUvNow($)
+        await logReconnect($, `uv probe: ${uv.state}${uv.version ? ` (${uv.version})` : ''} after ${Date.now() - started} ms`)
+        if (uv.state !== 'ok') return false
         await checkServer($)
+        await logReconnect($, `connect: ${view.mcp?.isConnected ? 'connected' : `not connected (${String(view.mcp?.reason ?? '').slice(0, 200)})`} after ${Date.now() - started} ms`)
         return view.mcp?.isConnected === true
       })()
-        .catch(() => false)
+        .catch(async error => {
+          await logReconnect($, `failed: ${messageOf(error)}`)
+          return false
+        })
         .finally(() => { promptReconnect = null })
     }
-    const joined = await Promise.race([promptReconnect, $.clock.sleep(PROMPT_RECONNECT_WAIT_MS).then(() => false, () => false)])
-    if (!joined) return next(e)
+    const waited = $.clock.sleep(PROMPT_RECONNECT_WAIT_MS).then(
+      () => 'timeout',
+      error => `sleep failed: ${messageOf(error)}`,
+    )
+    const outcome = await Promise.race([promptReconnect.then(joined => (joined ? 'joined' : 'not joined')), waited])
+    await logReconnect($, `prompt enters: ${outcome} after ${Date.now() - started} ms`)
+    if (outcome !== 'joined') return next(e)
     return next({ ...e, context: [...(Array.isArray(e.context) ? e.context : []), tEn('prompt.sandboxJoined')] })
   })
 

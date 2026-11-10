@@ -418,7 +418,7 @@ function loadMod({ options = {}, server = () => ({}), store = new Map(), locale 
     ui: {
       status: async text => void record.status.push(text),
       toast: async text => void record.toasts.push(text),
-      log: async () => {},
+      log: async text => void (record.logs ??= []).push(text),
       open: async pane => (record.opened.push(pane), { isPlaced: true }),
       resolve: () => elements,
     },
@@ -1835,6 +1835,10 @@ test('mod: a server that failed for want of uv reconnects before the next prompt
   const entered = await mod.fire('prompt.submit', { text: "I've installed it" }, async e => e)
   assert.equal(entered.text, "I've installed it")
   assert.deepEqual(entered.context, [EN['prompt.sandboxJoined']])
+  assert.ok(mod.record.logs.some(line => /^reconnect: uv probe: ok/.test(line)), 'the uv probe is logged')
+  assert.ok(mod.record.logs.some(line => /^reconnect: connect: connected after \d+ ms$/.test(line)), 'the connect is logged')
+  assert.ok(mod.record.logs.some(line => /^reconnect: prompt enters: joined after \d+ ms$/.test(line)), 'the outcome is logged')
+  assert.ok(mod.record.logs.some(line => /^reconnect: uv probe: missing/.test(line)), 'the earlier missing probe is logged')
   assert.equal(mod.record.state.get('view').mcp.isConnected, true)
 })
 
@@ -1865,6 +1869,7 @@ test('mod: a reconnect slower than the wait lets the prompt in as typed and fini
   slow = true
   const entered = await mod.fire('prompt.submit', { text: 'go' }, async e => e)
   assert.deepEqual(entered, { text: 'go' })
+  assert.ok(mod.record.logs.some(line => /^reconnect: prompt enters: timeout after \d+ ms$/.test(line)), 'a timeout is logged')
   for (let i = 0; i < 5 && !release; i++) await mod.settle()
   release()
   for (let i = 0; i < 5; i++) await mod.settle()
