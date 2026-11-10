@@ -132,7 +132,10 @@ again here. A Velloc older than 1.155.2.6 does not launch a plugin server that
 failed earlier in the session with a config that has since changed (it
 answers that the name is "another MCP server's name in this session"); on
 such a build the server line says to start a new session instead of
-Reconnect. While uv, the key or the
+Reconnect. Once uv runs, a server that failed for want of it is started
+again before the user's next message enters, so its tools are there in that
+turn (a reconnect slower than 4 s finishes in the background); a check that
+connects it mid-turn says its tools come with the next message. While uv, the key or the
 Project ID is missing, the server line only waits on them. The Project ID is
 optional for models and is asked for only when a sandbox is wanted. Keys are checked for presence only. Nothing is
 checked or shown until it matters: when the server does not connect, the

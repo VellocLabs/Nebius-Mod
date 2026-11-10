@@ -74,6 +74,11 @@ async function probeUv($, home) {
   return { state: runFailed ? 'unknown' : 'missing' }
 }
 
+/** `uvx` as this computer has it now, the same probe the setup check makes. */
+export async function probeUvNow($) {
+  return probeUv($, await homeOf($))
+}
+
 /**
  * Whether this session can run an installer: `true` with a shell tool,
  * `false` without one, `null` when the session's tools cannot be listed.

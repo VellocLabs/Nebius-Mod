@@ -45,7 +45,7 @@ import { createImageCatalog } from './sandbox/images.js'
 import { createFileBrowser } from './sandbox/files.js'
 import { migrateLanes, readGlobalLanes, writeLaneChanges } from './sandbox/storage.js'
 import { patchCommand, PATCH_OUTPUT_LIMIT, PATCH_INLINE_LIMIT } from './sandbox/patch.js'
-import { PARTS, probeSetup, setupChecks, setupReport } from './setup.js'
+import { PARTS, probeSetup, probeUvNow, setupChecks, setupReport } from './setup.js'
 
 const PLUGIN = 'nebius'
 const PANE_ID = 'sandbox'
@@ -55,6 +55,8 @@ const IDLE_TICKS = 10
 const WAIT_SLICE_SECONDS = 240
 const TRACK_KEEP_MS = 24 * 3600 * 1000
 const ALL_CONTREE_TOOLS = [...REMOTE_ONLY_TOOLS, 'rsync', 'upload', 'download']
+/** How long a prompt waits for a reconnect; under Velloc's 5 s hook budget. A slower one finishes in the background. */
+const PROMPT_RECONNECT_WAIT_MS = 4000
 
 /** The plugin's own tools; `sandbox_lane_patch` can write a local file, so it is never auto-approved. */
 const OWN_TOOLS = {
@@ -344,8 +346,12 @@ export function register(on, options = {}) {
 
   async function setupTool($, e) {
     const parts = e.part === 'search' ? ['search'] : e.part === 'all' ? PARTS : ['sandbox']
+    const wasDown = !!view.mcp && !view.mcp.isConnected
     if (parts.includes('sandbox') && !(view.mcp?.isConnected && !view.mcp.authError && !view.mcp.missing)) await checkServer($)
-    return { result: setupReport(await runSetup($, parts), tEn) }
+    const report = setupReport(await runSetup($, parts), tEn)
+    // Tools a server brings mid-turn are offered from the next prompt on.
+    const joinedNow = parts.includes('sandbox') && wasDown && view.mcp?.isConnected === true
+    return { result: joinedNow ? `${report}\n${tEn('setup.report.joinedNextPrompt')}` : report }
   }
 
   async function checkServer($) {
@@ -706,6 +712,25 @@ export function register(on, options = {}) {
     await publish($)
     void checkServer($)
     return next(e)
+  })
+
+  // A server that failed earlier is tried again before the user's next prompt
+  // enters, once uv runs: its tools then join this turn, not the one after.
+  let promptReconnect = null
+  on('prompt.submit', async ($, e, next) => {
+    if (!view.mcp || view.mcp.isConnected) return next(e)
+    if (!promptReconnect) {
+      promptReconnect = (async () => {
+        if ((await probeUvNow($)).state !== 'ok') return false
+        await checkServer($)
+        return view.mcp?.isConnected === true
+      })()
+        .catch(() => false)
+        .finally(() => { promptReconnect = null })
+    }
+    const joined = await Promise.race([promptReconnect, $.clock.sleep(PROMPT_RECONNECT_WAIT_MS).then(() => false, () => false)])
+    if (!joined) return next(e)
+    return next({ ...e, context: [...(Array.isArray(e.context) ? e.context : []), tEn('prompt.sandboxJoined')] })
   })
 
   // Outer observer: preserve the existing guards and results; never count our own polling.

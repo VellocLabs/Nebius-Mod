@@ -26,14 +26,20 @@ Python or anything else locally to stand in for it.
    ask for a key or ID in chat and never write one to a file. Then wait.
    When a session has no shell, installing uv is the user's too: relay the
    check's words (install it in a terminal, or ask an Agent or Code session
-   to), say it once, and do not ask again for permission you cannot use.
+   to), with the install command copied exactly as the check wrote it, say
+   it once, and do not ask again for permission you cannot use.
    A sandbox server line that says to start a new session means exactly
    that: this version of Velloc will not start it again in this session,
    so say so instead of checking in a loop.
-4. **Check again** when the user says it is done. Only if a just-installed
-   tool is still not found, ask the user to fully quit Velloc (tray icon
+4. **Check again** when the user says it is done. When their message comes
+   with a note that the sandbox server is connected now, it already
+   reconnected: skip the check and carry on. Only if a just-installed tool
+   is still not found, ask the user to fully quit Velloc (tray icon
    included) and reopen it.
 5. **Carry on.** Once the check says everything is set up, go straight back
    to the user's original request through the sandbox tools
    (`mcp__contree__*`, whose server explains itself with `get_guide`) or
-   Tavily search. Do not ask the user what to do next.
+   Tavily search. Do not ask the user what to do next. When the check says
+   the server connected during this turn, its `mcp__contree__*` tools come
+   with the user's next message: do what the `mcp__nebius__sandbox_*` tools
+   can now, else say in one line that the sandbox is ready and end the turn.

@@ -385,7 +385,7 @@ function matches(matcher, e) {
  * `server(tool, args)` answers each `$.mcp.call` with the reply object (sent as
  * JSON text) or throws.
  */
-function loadMod({ options = {}, server = () => ({}), store = new Map(), locale = 'en', connect, settings, process, files = [], env = {} } = {}) {
+function loadMod({ options = {}, server = () => ({}), store = new Map(), locale = 'en', connect, settings, process, files = [], env = {}, sleep = () => new Promise(() => {}) } = {}) {
   const hooks = []
   register((event, matcherOrFn, maybeFn) => {
     const fn = typeof matcherOrFn === 'function' ? matcherOrFn : maybeFn
@@ -424,7 +424,7 @@ function loadMod({ options = {}, server = () => ({}), store = new Map(), locale 
     },
     tool: { register: async spec => (record.tools.push(spec), { tool: `mcp__nebius__${spec.name}` }) },
     command: { register: async spec => void record.commands.push(spec) },
-    clock: { every: (ms, fn) => (record.timers.push({ ms, fn }), { cancel() {} }) },
+    clock: { every: (ms, fn) => (record.timers.push({ ms, fn }), { cancel() {} }), sleep: ms => sleep(ms) },
     mcp: {
       connect: connect ?? (async server => ({ isConnected: true, server })),
       call: async (serverName, tool, args) => {
@@ -1804,4 +1804,82 @@ test('mod: an empty default image is explained, and the manifest now defaults to
   await mod.fire('session.start', {})
   const made = await mod.fire('tool.call', { tool: 'mcp__nebius__sandbox_lane_new', tool_use_id: 't', name: 'python-dev' })
   assert.match(made.deny, /no default image[\s\S]*Default image: not set/)
+})
+
+// ── reconnect before the next prompt ──
+
+const UV_FIXED_LATER = () => {
+  let installed = false
+  return { install: () => { installed = true }, process: () => (installed ? uvOk() : uvMissing()) }
+}
+const connectWhenUv = uv => async () =>
+  uv.process().exitCode === 0
+    ? { isConnected: true, server: 'contree' }
+    : { isConnected: false, reason: 'failed', message: '"contree" did not connect: BINARY_NOT_FOUND uvx' }
+
+test('mod: a server that failed for want of uv reconnects before the next prompt, and the prompt says its tools are here', async () => {
+  const uv = UV_FIXED_LATER()
+  let connects = 0
+  const connect = connectWhenUv(uv)
+  const mod = loadMod({ settings: savedSettings(), process: uv.process, env: { USERPROFILE: HOME }, connect: async () => (connects++, connect()) })
+  await mod.fire('session.start', {})
+  for (let i = 0; i < 5; i++) await mod.settle()
+  assert.equal(mod.record.state.get('view').mcp.isConnected, false)
+
+  const before = connects
+  const stillMissing = await mod.fire('prompt.submit', { text: 'done?' }, async e => e)
+  assert.deepEqual(stillMissing, { text: 'done?' }, 'uv still missing: the prompt enters as typed')
+  assert.equal(connects, before, 'and the server is not launched again')
+
+  uv.install()
+  const entered = await mod.fire('prompt.submit', { text: "I've installed it" }, async e => e)
+  assert.equal(entered.text, "I've installed it")
+  assert.deepEqual(entered.context, [EN['prompt.sandboxJoined']])
+  assert.equal(mod.record.state.get('view').mcp.isConnected, true)
+})
+
+test('mod: with the server connected, a prompt passes untouched and nothing is probed', async () => {
+  let probes = 0
+  const mod = loadMod({ settings: savedSettings(), process: () => (probes++, uvOk()), env: { USERPROFILE: HOME } })
+  await mod.fire('session.start', {})
+  for (let i = 0; i < 5; i++) await mod.settle()
+  const counted = probes
+  const entered = await mod.fire('prompt.submit', { text: 'hi' }, async e => e)
+  assert.deepEqual(entered, { text: 'hi' })
+  assert.equal(probes, counted)
+})
+
+test('mod: a reconnect slower than the wait lets the prompt in as typed and finishes in the background', async () => {
+  const uv = UV_FIXED_LATER()
+  let release
+  let slow = false
+  const connect = async () => {
+    if (!slow) return { isConnected: false, reason: 'failed', message: 'BINARY_NOT_FOUND uvx' }
+    await new Promise(resolve => { release = resolve })
+    return { isConnected: true, server: 'contree' }
+  }
+  const mod = loadMod({ settings: savedSettings(), process: uv.process, env: { USERPROFILE: HOME }, connect, sleep: async () => {} })
+  await mod.fire('session.start', {})
+  for (let i = 0; i < 5; i++) await mod.settle()
+  uv.install()
+  slow = true
+  const entered = await mod.fire('prompt.submit', { text: 'go' }, async e => e)
+  assert.deepEqual(entered, { text: 'go' })
+  for (let i = 0; i < 5 && !release; i++) await mod.settle()
+  release()
+  for (let i = 0; i < 5; i++) await mod.settle()
+  assert.equal(mod.record.state.get('view').mcp.isConnected, true)
+})
+
+test('mod: nebius_setup that brings a failed server up in this turn says its tools come with the next message', async () => {
+  const uv = UV_FIXED_LATER()
+  const mod = loadMod({ settings: savedSettings(), process: uv.process, env: { USERPROFILE: HOME }, connect: connectWhenUv(uv), options: { default_image: 'tag:python:3.12' } })
+  await mod.fire('session.start', {})
+  for (let i = 0; i < 5; i++) await mod.settle()
+  uv.install()
+  const answer = await mod.fire('tool.call', { tool: 'mcp__nebius__nebius_setup', tool_use_id: 't', part: 'sandbox' })
+  assert.match(answer.result, /Everything is set up/)
+  assert.ok(answer.result.endsWith(EN['setup.report.joinedNextPrompt']))
+  const again = await mod.fire('tool.call', { tool: 'mcp__nebius__nebius_setup', tool_use_id: 't2', part: 'sandbox' })
+  assert.ok(!again.result.includes(EN['setup.report.joinedNextPrompt']), 'only the call that connected it says so')
 })

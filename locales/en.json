@@ -199,6 +199,8 @@
   "setup.report.agent": "You do: {items}. Do not hand this to the user and do not ask first: run the command yourself now with your shell tool (Velloc asks the user for permission if its settings want that), then call nebius_setup again.",
   "setup.report.user": "The user does: {items}. Tell the user exactly where, in the words above (put it in the same AskUserQuestion if you are asking one), and wait. Never ask for a key or ID in chat.",
   "setup.report.scope": "Mention only the lines marked ✗ or ?; nothing else is needed. Do not run anything on this computer in the sandbox's place. As soon as the check passes, carry on with the user's original request.",
+  "setup.report.joinedNextPrompt": "The sandbox server connected during this turn, so its mcp__contree__* tools are offered from the user's next message on. For the rest of this turn use the mcp__nebius__sandbox_* tools; if the request needs contree itself, say in one line that the sandbox is ready and end the turn.",
+  "prompt.sandboxJoined": "The Nebius sandbox server is connected now: its mcp__contree__* tools are available in this turn. Carry on with the user's sandbox request through them; nebius_setup need not be checked again.",
   "setup.uv.label": "uv (starts the sandbox server)",
   "setup.uv.ok": "{version}",
   "setup.uv.missing": "not installed. Install it with `winget install --id astral-sh.uv -e --source winget` on Windows, or `curl -LsSf https://astral.sh/uv/install.sh | sh` on macOS and Linux, then check again: that reconnects the sandbox server.",
