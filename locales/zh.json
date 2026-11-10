@@ -200,6 +200,7 @@
   "setup.report.agent": "由你处理：{items}。",
   "setup.report.user": "需要用户操作：{items}。",
   "setup.report.scope": "只需处理标为 ✗ 或 ? 的项。",
+  "setup.report.uvCommand": "把安装命令原样作为下面这个代码块给用户，单独成行、不做任何改动（包括语言标记），这样聊天里会显示一个可点击的运行按钮：\n{block}",
   "setup.report.joinedNextPrompt": "沙箱服务器在本轮中途连上了，它的 mcp__contree__* 工具从用户的下一条消息起可用。本轮剩下的部分请用 mcp__nebius__sandbox_* 工具；如果请求必须用 contree，就用一句话告诉用户沙箱已就绪，然后结束本轮。",
   "prompt.sandboxJoined": "Nebius 沙箱服务器现已连接：本轮即可使用它的 mcp__contree__* 工具。请直接用它们继续处理用户的沙箱请求，不必再检查 nebius_setup。",
   "setup.uv.label": "uv（用于启动沙箱服务）",

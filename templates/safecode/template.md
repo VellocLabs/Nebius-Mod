@@ -22,7 +22,7 @@ description: Edit locally with SuperEdit, run everything in Nebius sandboxes.
 tools: [read, plan, superedit, skills, ask, todo, subagent]
 mcp: plugin
 fileSnapshots: true
-skills: [plugin:nebius:setup]
+skills: [plugin:nebius:setup, bundled:debug]
 agents: [Explore, Plan, general-purpose]
 ---
 

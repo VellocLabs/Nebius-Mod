@@ -1652,7 +1652,7 @@ test('setup: auth.ini stands in for the key and project; access problems and a r
 
 test('setup: without a shell, installing uv is the user\'s, in a terminal or another session', () => {
   const checks = setupChecks({ uv: { state: 'missing' }, shell: false, key: true, project: true }, { mcp: { isConnected: false, reason: 'failed' }, defaultImage: 'x', parts: ['sandbox'] })
-  assert.deepEqual(checks.find(check => check.id === 'uv'), { id: 'uv', state: 'missing', by: 'user', vars: { noShell: true } })
+  assert.deepEqual(checks.find(check => check.id === 'uv'), { id: 'uv', state: 'missing', by: 'user', vars: { noShell: true, windows: false } })
   const report = setupReport(checks, tEn)
   assert.match(report, /✗ uv \(starts the sandbox server\): not installed, and this session has no shell[\s\S]*Agent or Code session[\s\S]*check again here[\s\S]*\[the user does this\]/)
   assert.doesNotMatch(report, /new session/, 'a check again reconnects the server; no new session is needed')
@@ -1732,7 +1732,7 @@ test('setup: probing reads key presence only, finds the project in pluginConfigs
     process: { run: async () => uvMissing() },
   }
   const facts = await probeSetup($)
-  assert.deepEqual(facts, { key: true, tavilyKey: false, uv: { state: 'offPath' }, shell: null, project: true, authFile: false })
+  assert.deepEqual(facts, { key: true, tavilyKey: false, uv: { state: 'offPath' }, shell: null, project: true, authFile: false, windows: true })
   assert.doesNotMatch(JSON.stringify(facts), new RegExp(SEALED))
   assert.deepEqual(await probeSetup({ plugin: { name: 'nebius' } }, { parts: ['search'] }), { key: null, tavilyKey: null }, 'no settings: unknown, not missing')
 })
@@ -1887,4 +1887,25 @@ test('mod: nebius_setup that brings a failed server up in this turn says its too
   assert.ok(answer.result.endsWith(EN['setup.report.joinedNextPrompt']))
   const again = await mod.fire('tool.call', { tool: 'mcp__nebius__nebius_setup', tool_use_id: 't2', part: 'sandbox' })
   assert.ok(!again.result.includes(EN['setup.report.joinedNextPrompt']), 'only the call that connected it says so')
+})
+
+const fakeProbe = env => ({
+  plugin: { name: 'nebius' },
+  settings: { read: async () => savedSettings() },
+  env: { get: async name => env[name] },
+  fs: { exists: async () => false },
+  process: { run: async () => uvMissing() },
+})
+
+test('setup: without a shell, the report hands the model the install command as a one-line shell fence for this computer', async () => {
+  const windows = await probeSetup(fakeProbe({ LOCALAPPDATA: 'C:/Users/me/AppData/Local', USERPROFILE: HOME }), { parts: ['sandbox'] })
+  assert.equal(windows.windows, true)
+  const unix = await probeSetup(fakeProbe({ HOME: '/home/me' }), { parts: ['sandbox'] })
+  assert.equal(unix.windows, false)
+  const reportOf = facts => setupReport(setupChecks({ ...facts, shell: false }, { mcp: null, defaultImage: 'tag:py', parts: ['sandbox'] }), tEn)
+  assert.ok(reportOf(windows).includes('\n```powershell\nwinget install --id astral-sh.uv -e --source winget\n```'))
+  assert.ok(!reportOf(windows).includes('```bash'))
+  assert.ok(reportOf(unix).includes('\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```'))
+  const withShell = setupReport(setupChecks({ ...windows, shell: true }, { mcp: null, defaultImage: 'tag:py', parts: ['sandbox'] }), tEn)
+  assert.ok(!withShell.includes('```'), 'a session with a shell runs it itself: no block for the user')
 })

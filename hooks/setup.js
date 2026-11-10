@@ -14,6 +14,11 @@ const UV_HOME_DIRS = Object.freeze(['.local/bin', '.cargo/bin'])
 const UV_LOCAL_APP_DATA_DIRS = Object.freeze(['Microsoft/WinGet/Links'])
 const UV_NAMES = Object.freeze(['uvx.exe', 'uvx'])
 const UV_TIMEOUT_MS = 15_000
+/** The install command as a one-line shell fence: Velloc's chat renders it as a card with Run. */
+export const UV_INSTALL_BLOCK = Object.freeze({
+  windows: '```powershell\nwinget install --id astral-sh.uv -e --source winget\n```',
+  unix: '```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```',
+})
 /** The tools that can run an installer on this computer; a SafeCode session has neither. */
 const SHELL_TOOLS = Object.freeze(['Bash', 'PowerShell'])
 /** A Velloc before 1.155.2.6 answers this for a plugin server that failed earlier in the session with a config that has since changed; it never launches it again. */
@@ -114,8 +119,10 @@ export async function probeSetup($, { parts = PARTS } = {}) {
   if (!parts.includes('sandbox')) return facts
   const home = await homeOf($)
   const stored = storedOptions(settings, $.plugin?.name ?? 'nebius')
+  const localAppData = await quietly(() => $.env.get('LOCALAPPDATA'))
   return {
     ...facts,
+    windows: filled(localAppData) || /^[A-Za-z]:\//.test(home ?? ''),
     uv: await probeUv($, home),
     shell: await probeShell($),
     project: known(filled(stored?.project_id)),
@@ -142,7 +149,7 @@ export function setupChecks(facts, { mcp = null, defaultImage = '', parts = PART
     if (uv !== 'ok' && mcp?.isConnected) add('uv', 'ok', 'agent', { via: 'server' })
     else if (uv === 'ok') add('uv', 'ok', 'agent', { version: facts.uv.version })
     else if (uv === 'offPath') add('uv', 'failed', 'user')
-    else if (facts.shell === false) add('uv', uv, 'user', { noShell: true })
+    else if (facts.shell === false) add('uv', uv, 'user', { noShell: true, windows: facts.windows === true })
     else add('uv', uv, 'agent')
     const credential = (value, id) => add(id, value === true ? 'ok' : facts.authFile ? 'ok' : value === false ? 'missing' : 'unknown', 'user', value !== true && facts.authFile ? { via: 'auth.ini' } : undefined)
     credential(facts.key, 'key')
@@ -203,6 +210,10 @@ export function setupReport(checks, t) {
   const lines = checks.map(check => `${mark[check.state]} ${t(`setup.${check.id}.label`)}: ${t(checkTextKey(check), check.vars)}${quiet(check) ? '' : ` [${t(`setup.by.${check.by}`)}]`}`)
   const pending = checks.filter(blocks)
   const names = by => pending.filter(check => check.by === by).map(check => t(`setup.${check.id}.label`)).join(', ')
+  const uvForUser = pending.find(check => check.id === 'uv' && check.by === 'user' && check.vars?.noShell)
+  if (uvForUser) {
+    lines.push('', t('setup.report.uvCommand', { block: uvForUser.vars.windows ? UV_INSTALL_BLOCK.windows : UV_INSTALL_BLOCK.unix }))
+  }
   lines.push('')
   if (pending.length === 0) lines.push(t('setup.report.ready'))
   else {

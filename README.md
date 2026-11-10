@@ -127,7 +127,9 @@ access) or `search` (the Tavily key). It answers one line per requirement
 with who does it: the agent (installing uv, run straight away with its shell
 tool) or the user (the key, the Project ID, Sandboxes access). A session
 with no shell tool — SafeCode — hands installing uv to the user as well: in a
-terminal, or by asking an Agent or Code session to install it, then a check
+terminal (the check gives the command as a one-line `powershell` or
+`bash` block, which Velloc's chat shows with a Run button), or by asking an
+Agent or Code session to install it, then a check
 again here. A Velloc older than 1.155.2.6 does not launch a plugin server that
 failed earlier in the session with a config that has since changed (it
 answers that the name is "another MCP server's name in this session"); on

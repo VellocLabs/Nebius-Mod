@@ -26,8 +26,9 @@ Python or anything else locally to stand in for it.
    ask for a key or ID in chat and never write one to a file. Then wait.
    When a session has no shell, installing uv is the user's too: relay the
    check's words (install it in a terminal, or ask an Agent or Code session
-   to), with the install command copied exactly as the check wrote it, say
-   it once, and do not ask again for permission you cannot use.
+   to), with the install command as the fenced block the check gives,
+   copied unchanged with its `powershell` or `bash` tag so the user can run
+   it with one click; say it once, and do not ask again for permission you cannot use.
    A sandbox server line that says to start a new session means exactly
    that: this version of Velloc will not start it again in this session,
    so say so instead of checking in a loop.
